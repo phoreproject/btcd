@@ -230,6 +230,10 @@ type server struct {
 	txIndex   *indexers.TxIndex
 	addrIndex *indexers.AddrIndex
 	cfIndex   *indexers.CfIndex
+
+	// The fee estimator keeps track of how long transactions are left in
+	// the mempool before they are mined into blocks.
+	feeEstimator *mempool.FeeEstimator
 }
 
 // serverPeer extends the peer to maintain state shared by the server and
@@ -1640,7 +1644,7 @@ func (s *server) handleQuery(state *peerState, querymsg interface{}) {
 		} else {
 			msg.reply <- 0
 		}
-		// Request a list of the persistent (added) peers.
+	// Request a list of the persistent (added) peers.
 	case getAddedNodesMsg:
 		// Respond with a slice of the relevant peers.
 		peers := make([]*serverPeer, 0, len(state.persistentPeers))
@@ -1844,24 +1848,24 @@ out:
 		case p := <-s.newPeers:
 			s.handleAddPeerMsg(state, p)
 
-			// Disconnected peers.
+		// Disconnected peers.
 		case p := <-s.donePeers:
 			s.handleDonePeerMsg(state, p)
 
-			// Block accepted in mainchain or orphan, update peer height.
+		// Block accepted in mainchain or orphan, update peer height.
 		case umsg := <-s.peerHeightsUpdate:
 			s.handleUpdatePeerHeights(state, umsg)
 
-			// Peer to ban.
+		// Peer to ban.
 		case p := <-s.banPeers:
 			s.handleBanPeerMsg(state, p)
 
-			// New inventory to potentially be relayed to other peers.
+		// New inventory to potentially be relayed to other peers.
 		case invMsg := <-s.relayInv:
 			s.handleRelayInvMsg(state, invMsg)
 
-			// Message to broadcast to all connected peers except those
-			// which are excluded by the message.
+		// Message to broadcast to all connected peers except those
+		// which are excluded by the message.
 		case bmsg := <-s.broadcast:
 			s.handleBroadcastMsg(state, &bmsg)
 
@@ -1991,8 +1995,8 @@ out:
 			case broadcastInventoryAdd:
 				pendingInvs[*msg.invVect] = msg.data
 
-				// When an InvVect has been added to a block, we can
-				// now remove it, if it was present.
+			// When an InvVect has been added to a block, we can
+			// now remove it, if it was present.
 			case broadcastInventoryDel:
 				if _, ok := pendingInvs[*msg]; ok {
 					delete(pendingInvs, *msg)
@@ -2088,6 +2092,14 @@ func (s *server) Stop() error {
 	if !cfg.DisableRPC {
 		s.rpcServer.Stop()
 	}
+
+	// Save fee estimator state in the database.
+	s.db.Update(func(tx database.Tx) error {
+		metadata := tx.Metadata()
+		metadata.Put(mempool.EstimateFeeDatabaseKey, s.feeEstimator.Save())
+
+		return nil
+	})
 
 	// Signal the remaining goroutines to quit.
 	close(s.quit)
@@ -2393,9 +2405,35 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 		return nil, err
 	}
 
-	feeEstimator := mempool.NewFeeEstimator(
-		mempool.DefaultEstimateFeeMaxRollback,
-		mempool.DefaultEstimateFeeMinRegisteredBlocks)
+	// Search for a FeeEstimator state in the database. If none can be found
+	// or if it cannot be loaded, create a new one.
+	db.Update(func(tx database.Tx) error {
+		metadata := tx.Metadata()
+		feeEstimationData := metadata.Get(mempool.EstimateFeeDatabaseKey)
+		if feeEstimationData != nil {
+			// delete it from the database so that we don't try to restore the
+			// same thing again somehow.
+			metadata.Delete(mempool.EstimateFeeDatabaseKey)
+
+			// If there is an error, log it and make a new fee estimator.
+			var err error
+			s.feeEstimator, err = mempool.RestoreFeeEstimator(feeEstimationData)
+
+			if err != nil {
+				peerLog.Errorf("Failed to restore fee estimator %v", err)
+			}
+		}
+
+		return nil
+	})
+
+	// If no feeEstimator has been found, or if the one that has been found
+	// is behind somehow, create a new one and start over.
+	if s.feeEstimator == nil || s.feeEstimator.LastKnownHeight() != s.chain.BestSnapshot().Height {
+		s.feeEstimator = mempool.NewFeeEstimator(
+			mempool.DefaultEstimateFeeMaxRollback,
+			mempool.DefaultEstimateFeeMinRegisteredBlocks)
+	}
 
 	txC := mempool.Config{
 		Policy: mempool.Policy{
@@ -2418,7 +2456,7 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 		SigCache:     s.sigCache,
 		HashCache:    s.hashCache,
 		AddrIndex:    s.addrIndex,
-		FeeEstimator: feeEstimator,
+		FeeEstimator: s.feeEstimator,
 	}
 	s.txMemPool = mempool.New(&txC)
 
@@ -2567,7 +2605,7 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 			TxIndex:      s.txIndex,
 			AddrIndex:    s.addrIndex,
 			CfIndex:      s.cfIndex,
-			FeeEstimator: feeEstimator,
+			FeeEstimator: s.feeEstimator,
 		})
 		if err != nil {
 			return nil, err
