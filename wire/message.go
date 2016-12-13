@@ -51,6 +51,7 @@ const (
 	CmdReject                    = "reject"
 	CmdSendHeaders               = "sendheaders"
 	CmdFeeFilter                 = "feefilter"
+	CmdGetCBFilter               = "getcbfilter"
 	CmdMasternodeWinner          = "mnw"
 	CmdMasternodeProposal        = "mprop"
 	CmdMasternodeVote            = "mvote"
@@ -174,6 +175,9 @@ func makeEmptyMessage(command string) (Message, error) {
 
 	case CmdFeeFilter:
 		msg = &MsgFeeFilter{}
+
+	case CmdGetCBFilter:
+		msg = &MsgGetCBFilter{}
 
 	case CmdMasternodeWinner:
 		msg = &MsgMasternodeWinner{}
