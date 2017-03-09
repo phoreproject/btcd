@@ -827,7 +827,6 @@ func (sp *serverPeer) OnGetCFHeaders(_ *peer.Peer, msg *wire.MsgGetCFHeaders) {
 
 	// Generate cfheaders message and send it.
 	headersMsg := wire.NewMsgCFHeaders()
-	var header chainhash.Hash
 	for i := range hashList {
 		// Fetch the raw committed filter header bytes from the
 		// database.
@@ -840,6 +839,7 @@ func (sp *serverPeer) OnGetCFHeaders(_ *peer.Peer, msg *wire.MsgGetCFHeaders) {
 		}
 
 		// Deserialize the hash.
+		var header chainhash.Hash
 		err = header.SetBytes(headerBytes)
 		if err != nil {
 			peerLog.Warnf("Committed filter header deserialize "+
