@@ -2071,6 +2071,52 @@ func handleGetBlockTemplate(s *rpcServer, cmd interface{}, closeChan <-chan stru
 	}
 }
 
+// handleGetCFilter implements the getcfilter command.
+func handleGetCFilter(s *rpcServer, cmd interface{}, closeChan <-chan struct{}) (interface{}, error) {
+	c := cmd.(*btcjson.GetCFilterCmd)
+	hash, err := chainhash.NewHashFromStr(c.Hash)
+	if err != nil {
+		return nil, rpcDecodeHexError(c.Hash)
+	}
+
+	filterBytes, err := s.cfg.CfIndex.FilterByBlockHash(hash, c.Extended)
+	if err != nil {
+		rpcsLog.Debugf("Could not find committed filter for %v: %v",
+			hash, err)
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCBlockNotFound,
+			Message: "Block not found",
+		}
+	}
+
+	rpcsLog.Debugf("Found committed filter for %v", hash)
+	return hex.EncodeToString(filterBytes), nil
+}
+
+// handleGetCFilterHeader implements the getcfilterheader command.
+func handleGetCFilterHeader(s *rpcServer, cmd interface{}, closeChan <-chan struct{}) (interface{}, error) {
+	c := cmd.(*btcjson.GetCFilterHeaderCmd)
+	hash, err := chainhash.NewHashFromStr(c.Hash)
+	if err != nil {
+		return nil, rpcDecodeHexError(c.Hash)
+	}
+
+	headerBytes, err := s.cfg.CfIndex.FilterHeaderByBlockHash(hash, c.Extended)
+	if len(headerBytes) > 0 {
+		rpcsLog.Debugf("Found header of committed filter for %v", hash)
+	} else {
+		rpcsLog.Debugf("Could not find header of committed filter for %v: %v",
+			hash, err)
+		return nil, &btcjson.RPCError{
+			Code:    btcjson.ErrRPCBlockNotFound,
+			Message: "Block not found",
+		}
+	}
+
+	hash.SetBytes(headerBytes)
+	return hash.String(), nil
+}
+
 // handleGetConnectionCount implements the getconnectioncount command.
 func handleGetConnectionCount(s *rpcServer, cmd interface{}, closeChan <-chan struct{}) (interface{}, error) {
 	return s.cfg.ConnMgr.ConnectedCount(), nil
@@ -4109,6 +4155,7 @@ type rpcserverConfig struct {
 	// of to provide additional data when queried.
 	TxIndex   *indexers.TxIndex
 	AddrIndex *indexers.AddrIndex
+	CfIndex   *indexers.CfIndex
 }
 
 // newRPCServer returns a new instance of the rpcServer struct.
