@@ -2545,6 +2545,7 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 			CPUMiner:    s.cpuMiner,
 			TxIndex:     s.txIndex,
 			AddrIndex:   s.addrIndex,
+			CfIndex:     s.cfIndex,
 		})
 		if err != nil {
 			return nil, err
