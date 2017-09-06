@@ -44,13 +44,23 @@ var (
 	// zeroHash is the zero value for a chainhash.Hash and is defined as
 	// a package level variable to avoid the need to create a new instance
 	// every time a check is needed.
-	zeroHash = &chainhash.Hash{}
+	zeroHash chainhash.Hash
+
+	// block91842Hash is one of the two nodes which violate the rules
+	// set forth in BIP0030.  It is defined as a package level variable to
+	// avoid the need to create a new instance every time a check is needed.
+	block91842Hash = newHashFromStr("00000000000a4d0a398161ffc163c503763b1f4360639393e0e4c8e300e0caec")
+
+	// block91880Hash is one of the two nodes which violate the rules
+	// set forth in BIP0030.  It is defined as a package level variable to
+	// avoid the need to create a new instance every time a check is needed.
+	block91880Hash = newHashFromStr("00000000000743f190a18c5577a3c2d2a1f610ae9601ac046a38084ccb7cd721")
 )
 
 // isNullOutpoint determines whether or not a previous transaction output point
 // is set.
 func isNullOutpoint(outpoint *wire.OutPoint) bool {
-	if outpoint.Index == math.MaxUint32 && outpoint.Hash.IsEqual(zeroHash) {
+	if outpoint.Index == math.MaxUint32 && outpoint.Hash == zeroHash {
 		return true
 	}
 	return false
@@ -128,7 +138,7 @@ func IsCoinBaseTx(msgTx *wire.MsgTx) bool {
 	// The previous output of a coin base must have a max value index and
 	// a zero hash.
 	prevOut := &msgTx.TxIn[0].PreviousOutPoint
-	if prevOut.Index != math.MaxUint32 || !prevOut.Hash.IsEqual(zeroHash) {
+	if prevOut.Index != math.MaxUint32 || prevOut.Hash != zeroHash {
 		return false
 	}
 
