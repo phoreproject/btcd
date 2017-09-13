@@ -53,8 +53,10 @@ const (
 	CmdFeeFilter                 = "feefilter"
 	CmdGetCFilter                = "getcfilter"
 	CmdGetCFHeaders              = "getcfheaders"
+	CmdGetCFTypes                = "getcftypes"
 	CmdCFilter                   = "cfilter"
 	CmdCFHeaders                 = "cfheaders"
+	CmdCFTypes                   = "cftypes"
 	CmdMasternodeWinner          = "mnw"
 	CmdMasternodeProposal        = "mprop"
 	CmdMasternodeVote            = "mvote"
@@ -185,11 +187,17 @@ func makeEmptyMessage(command string) (Message, error) {
 	case CmdGetCFHeaders:
 		msg = &MsgGetCFHeaders{}
 
+	case CmdGetCFTypes:
+		msg = &MsgGetCFTypes{}
+
 	case CmdCFilter:
 		msg = &MsgCFilter{}
 
 	case CmdCFHeaders:
 		msg = &MsgCFHeaders{}
+
+	case CmdCFTypes:
+		msg = &MsgCFTypes{}
 
 	case CmdMasternodeWinner:
 		msg = &MsgMasternodeWinner{}
