@@ -47,6 +47,16 @@ var (
 	zeroHash = &chainhash.Hash{}
 )
 
+// isNullOutpoint determines whether or not a previous transaction output point
+// is set.
+func isNullOutpoint(outpoint *wire.OutPoint) bool {
+	if outpoint.Index == math.MaxUint32 && outpoint.Hash.IsEqual(zeroHash) {
+		return true
+	}
+	return false
+}
+
+
 // IsZerocoinSpend returns true if the transaction is a zerocoin spending
 // transaction.
 func IsZerocoinSpend(msg *wire.MsgTx) bool {
@@ -310,7 +320,7 @@ func CheckTransactionSanity(tx *btcutil.Tx) error {
 				continue
 			}
 			prevOut := &txIn.PreviousOutPoint
-			if wire.IsNullOutpoint(prevOut) {
+			if IsNullOutpoint(prevOut) {
 				return ruleError(ErrBadTxInput, "transaction "+
 					"input refers to previous output that "+
 					"is null")
@@ -749,7 +759,7 @@ func (b *BlockChain) checkBlockContext(block *btcutil.Block, prevNode *blockNode
 		segwitState := true
 
 		// If segwit is active, then we'll need to fully validate the
-		// new witness commitment for adherance to the rules.
+		// new witness commitment for adherence to the rules.
 		if segwitState {
 			// Validate the witness commitment (if any) within the
 			// block.  This involves asserting that if the coinbase
