@@ -2467,6 +2467,7 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 		ChainParams:        s.chainParams,
 		DisableCheckpoints: cfg.DisableCheckpoints,
 		MaxPeers:           cfg.MaxPeers,
+		FeeEstimator:       s.feeEstimator,
 	})
 	if err != nil {
 		return nil, err
