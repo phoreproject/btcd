@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/btcsuite/btcd/rpcclient"
-	"github.com/btcsuite/btcutil"
+	"github.com/phoreproject/btcd/rpcclient"
+	"github.com/phoreproject/btcutil"
 	"github.com/davecgh/go-spew/spew"
 )
 
