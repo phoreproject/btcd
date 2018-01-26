@@ -13,7 +13,7 @@ one entity can have the database open at a time (for most database backends),
 and that entity will be btcd.
 
 When a client wants programmatic access to the data provided by btcd, they'll
-likely want to use the [btcrpcclient](https://github.com/btcsuite/btcrpcclient)
+likely want to use the [rpcclient](https://github.com/btcsuite/btcd/tree/master/rpcclient)
 package which makes use of the [JSON-RPC API](https://github.com/phoreproject/btcd/tree/master/docs/json_rpc_api.md).
 
 However, this package could be extremely useful for any applications requiring
@@ -42,11 +42,11 @@ $ go get -u github.com/phoreproject/btcd/database
 
 ## Examples
 
-* [Basic Usage Example](http://godoc.org/github.com/phoreproject/btcd/database#example-package--BasicUsage)  
+* [Basic Usage Example](http://godoc.org/github.com/phoreproject/btcd/database#example-package--BasicUsage)
   Demonstrates creating a new database and using a managed read-write
   transaction to store and retrieve metadata.
 
-* [Block Storage and Retrieval Example](http://godoc.org/github.com/phoreproject/btcd/database#example-package--BlockStorageAndRetrieval)  
+* [Block Storage and Retrieval Example](http://godoc.org/github.com/phoreproject/btcd/database#example-package--BlockStorageAndRetrieval)
   Demonstrates creating a new database, using a managed read-write transaction
   to store a block, and then using a managed read-only transaction to fetch the
   block.
