@@ -6,6 +6,7 @@ package chaincfg
 
 import (
 	"errors"
+	"math"
 	"math/big"
 	"strings"
 	"time"
@@ -258,7 +259,7 @@ var MainNetParams = Params{
 
 	// Human-readable part for Bech32 encoded segwit addresses, as defined in
 	// BIP 173.
-	Bech32HRPSegwit: "ph", // always bc for main net
+	Bech32HRPSegwit: "ph", // always ph for main net
 
 	// Address encoding magics
 	PubKeyHashAddrID: 0x37, // starts with 1
