@@ -11,10 +11,10 @@ import (
 	"github.com/phoreproject/btcd/chaincfg"
 	"github.com/phoreproject/btcd/chaincfg/chainhash"
 	"github.com/phoreproject/btcd/database"
+	"github.com/phoreproject/btcd/wire"
 	"github.com/phoreproject/btcutil"
 	"github.com/phoreproject/btcutil/gcs"
 	"github.com/phoreproject/btcutil/gcs/builder"
-	"github.com/phoreproject/btcd/wire"
 )
 
 const (
@@ -154,9 +154,9 @@ func storeFilter(dbTx database.Tx, block *btcutil.Block, f *gcs.Filter,
 
 	// Start by storing the filter.
 	h := block.Hash()
-	var basicFilterBytes []byte
-	if f != nil {
-		basicFilterBytes = f.NBytes()
+	filterBytes, err := f.NBytes()
+	if err != nil {
+		return err
 	}
 	err = dbStoreFilterIdxEntry(dbTx, fkey, h, filterBytes)
 	if err != nil {
@@ -205,7 +205,7 @@ func (idx *CfIndex) ConnectBlock(dbTx database.Tx, block *btcutil.Block,
 	view *blockchain.UtxoViewpoint) error {
 
 	f, err := builder.BuildBasicFilter(block.MsgBlock())
-	if err != nil && err != gcs.ErrNoData {
+	if err != nil {
 		return err
 	}
 
@@ -215,7 +215,7 @@ func (idx *CfIndex) ConnectBlock(dbTx database.Tx, block *btcutil.Block,
 	}
 
 	f, err = builder.BuildExtFilter(block.MsgBlock())
-	if err != nil && err != gcs.ErrNoData {
+	if err != nil {
 		return err
 	}
 
