@@ -47,10 +47,6 @@ type bitConditionChecker struct {
 	chain *BlockChain
 }
 
-// Ensure the bitConditionChecker type implements the thresholdConditionChecker
-// interface.
-var _ thresholdConditionChecker = bitConditionChecker{}
-
 // BeginTime returns the unix timestamp for the median block time after which
 // voting on a rule change starts (at the next window).
 //
@@ -74,28 +70,6 @@ func (c bitConditionChecker) EndTime() uint64 {
 	return math.MaxUint64
 }
 
-// RuleChangeActivationThreshold is the number of blocks for which the condition
-// must be true in order to lock in a rule change.
-//
-// This implementation returns the value defined by the chain params the checker
-// is associated with.
-//
-// This is part of the thresholdConditionChecker interface implementation.
-func (c bitConditionChecker) RuleChangeActivationThreshold() uint32 {
-	return c.chain.chainParams.RuleChangeActivationThreshold
-}
-
-// MinerConfirmationWindow is the number of blocks in each threshold state
-// retarget window.
-//
-// This implementation returns the value defined by the chain params the checker
-// is associated with.
-//
-// This is part of the thresholdConditionChecker interface implementation.
-func (c bitConditionChecker) MinerConfirmationWindow() uint32 {
-	return c.chain.chainParams.MinerConfirmationWindow
-}
-
 // Condition returns true when the specific bit associated with the checker is
 // set and it's not supposed to be according to the expected version based on
 // the known deployments and the current state of the chain.
@@ -103,21 +77,18 @@ func (c bitConditionChecker) MinerConfirmationWindow() uint32 {
 // This function MUST be called with the chain state lock held (for writes).
 //
 // This is part of the thresholdConditionChecker interface implementation.
-func (c bitConditionChecker) Condition(node *blockNode) (bool, error) {
+func (c bitConditionChecker) Condition(node *blockNode) bool {
 	conditionMask := uint32(1) << c.bit
 	version := uint32(node.version)
 	if version&vbTopMask != vbTopBits {
-		return false, nil
+		return false
 	}
 	if version&conditionMask == 0 {
-		return false, nil
+		return false
 	}
 
-	expectedVersion, err := c.chain.calcNextBlockVersion(node.parent)
-	if err != nil {
-		return false, err
-	}
-	return uint32(expectedVersion)&conditionMask == 0, nil
+	expectedVersion := c.chain.calcNextBlockVersion(node.parent)
+	return uint32(expectedVersion)&conditionMask == 0
 }
 
 // deploymentChecker provides a thresholdConditionChecker which can be used to
@@ -130,7 +101,6 @@ type deploymentChecker struct {
 
 // Ensure the deploymentChecker type implements the thresholdConditionChecker
 // interface.
-var _ thresholdConditionChecker = deploymentChecker{}
 
 // BeginTime returns the unix timestamp for the median block time after which
 // voting on a rule change starts (at the next window).
@@ -155,28 +125,6 @@ func (c deploymentChecker) EndTime() uint64 {
 	return c.deployment.ExpireTime
 }
 
-// RuleChangeActivationThreshold is the number of blocks for which the condition
-// must be true in order to lock in a rule change.
-//
-// This implementation returns the value defined by the chain params the checker
-// is associated with.
-//
-// This is part of the thresholdConditionChecker interface implementation.
-func (c deploymentChecker) RuleChangeActivationThreshold() uint32 {
-	return c.chain.chainParams.RuleChangeActivationThreshold
-}
-
-// MinerConfirmationWindow is the number of blocks in each threshold state
-// retarget window.
-//
-// This implementation returns the value defined by the chain params the checker
-// is associated with.
-//
-// This is part of the thresholdConditionChecker interface implementation.
-func (c deploymentChecker) MinerConfirmationWindow() uint32 {
-	return c.chain.chainParams.MinerConfirmationWindow
-}
-
 // Condition returns true when the specific bit defined by the deployment
 // associated with the checker is set.
 //
@@ -197,24 +145,11 @@ func (c deploymentChecker) Condition(node *blockNode) (bool, error) {
 // while this function accepts any block node.
 //
 // This function MUST be called with the chain state lock held (for writes).
-func (b *BlockChain) calcNextBlockVersion(prevNode *blockNode) (int32, error) {
-	// Set the appropriate bits for each actively defined rule deployment
-	// that is either in the process of being voted on, or locked in for the
-	// activation at the next threshold window change.
-	expectedVersion := uint32(vbTopBits)
-	for id := 0; id < len(b.chainParams.Deployments); id++ {
-		deployment := &b.chainParams.Deployments[id]
-		cache := &b.deploymentCaches[id]
-		checker := deploymentChecker{deployment: deployment, chain: b}
-		state, err := b.thresholdState(prevNode, checker, cache)
-		if err != nil {
-			return 0, err
-		}
-		if state == ThresholdStarted || state == ThresholdLockedIn {
-			expectedVersion |= uint32(1) << deployment.BitNumber
-		}
+func (b *BlockChain) calcNextBlockVersion(prevNode *blockNode) int32 {
+	if uint32(prevNode.height) >= b.chainParams.ZerocoinStartHeight {
+		return 4
 	}
-	return int32(expectedVersion), nil
+	return 3
 }
 
 // CalcNextBlockVersion calculates the expected version of the block after the
@@ -222,11 +157,11 @@ func (b *BlockChain) calcNextBlockVersion(prevNode *blockNode) (int32, error) {
 // rule change deployments.
 //
 // This function is safe for concurrent access.
-func (b *BlockChain) CalcNextBlockVersion() (int32, error) {
+func (b *BlockChain) CalcNextBlockVersion() int32 {
 	b.chainLock.Lock()
-	version, err := b.calcNextBlockVersion(b.bestChain.Tip())
+	version := b.calcNextBlockVersion(b.bestChain.Tip())
 	b.chainLock.Unlock()
-	return version, err
+	return version
 }
 
 // warnUnknownRuleActivations displays a warning when any unknown new rules are
@@ -236,32 +171,6 @@ func (b *BlockChain) CalcNextBlockVersion() (int32, error) {
 //
 // This function MUST be called with the chain state lock held (for writes)
 func (b *BlockChain) warnUnknownRuleActivations(node *blockNode) error {
-	// Warn if any unknown new rules are either about to activate or have
-	// already been activated.
-	for bit := uint32(0); bit < vbNumBits; bit++ {
-		checker := bitConditionChecker{bit: bit, chain: b}
-		cache := &b.warningCaches[bit]
-		state, err := b.thresholdState(node.parent, checker, cache)
-		if err != nil {
-			return err
-		}
-
-		switch state {
-		case ThresholdActive:
-			if !b.unknownRulesWarned {
-				log.Warnf("Unknown new rules activated (bit %d)",
-					bit)
-				b.unknownRulesWarned = true
-			}
-
-		case ThresholdLockedIn:
-			window := int32(checker.MinerConfirmationWindow())
-			activationHeight := window - (node.height % window)
-			log.Warnf("Unknown new rules are about to activate in "+
-				"%d blocks (bit %d)", activationHeight, bit)
-		}
-	}
-
 	return nil
 }
 
@@ -269,19 +178,16 @@ func (b *BlockChain) warnUnknownRuleActivations(node *blockNode) error {
 // blocks have unexpected versions.
 //
 // This function MUST be called with the chain state lock held (for writes)
-func (b *BlockChain) warnUnknownVersions(node *blockNode) error {
+func (b *BlockChain) warnUnknownVersions(node *blockNode) {
 	// Nothing to do if already warned.
 	if b.unknownVersionsWarned {
-		return nil
+		return
 	}
 
 	// Warn if enough previous blocks have unexpected versions.
 	numUpgraded := uint32(0)
 	for i := uint32(0); i < unknownVerNumToCheck && node != nil; i++ {
-		expectedVersion, err := b.calcNextBlockVersion(node.parent)
-		if err != nil {
-			return err
-		}
+		expectedVersion := b.calcNextBlockVersion(node.parent)
 		if expectedVersion > vbLegacyBlockVersion &&
 			(node.version & ^expectedVersion) != 0 {
 
@@ -297,5 +203,5 @@ func (b *BlockChain) warnUnknownVersions(node *blockNode) error {
 		b.unknownVersionsWarned = true
 	}
 
-	return nil
+	return
 }

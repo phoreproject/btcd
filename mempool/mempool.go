@@ -73,12 +73,6 @@ type Config struct {
 	// utxo view.
 	CalcSequenceLock func(*btcutil.Tx, *blockchain.UtxoViewpoint) (*blockchain.SequenceLock, error)
 
-	// IsDeploymentActive returns true if the target deploymentID is
-	// active, and false otherwise. The mempool uses this function to gauge
-	// if transactions using new to be soft-forked rules should be allowed
-	// into the mempool or not.
-	IsDeploymentActive func(deploymentID uint32) (bool, error)
-
 	// SigCache defines a signature cache to use.
 	SigCache *txscript.SigCache
 
@@ -617,10 +611,7 @@ func (mp *TxPool) maybeAcceptTransaction(tx *btcutil.Tx, isNew, rateLimit, rejec
 	// segwit isn't active yet, then we won't accept it into the mempool as
 	// it can't be mined yet.
 	if tx.MsgTx().HasWitness() {
-		segwitActive, err := mp.cfg.IsDeploymentActive(chaincfg.DeploymentSegwit)
-		if err != nil {
-			return nil, nil, err
-		}
+		segwitActive := false
 
 		if !segwitActive {
 			str := fmt.Sprintf("transaction %v has witness data, "+

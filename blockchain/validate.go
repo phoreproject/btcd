@@ -37,10 +37,6 @@ const (
 	// serializedHeightVersion is the block version which changed block
 	// coinbases to start with the serialized block height.
 	serializedHeightVersion = 2
-
-	// baseSubsidy is the starting subsidy amount for mined blocks.  This
-	// value is halved every SubsidyHalvingInterval blocks.
-	baseSubsidy = 50 * btcutil.SatoshiPerBitcoin
 )
 
 var (
@@ -192,12 +188,20 @@ func isBIP0030Node(node *blockNode) bool {
 // At the target block generation rate for the main network, this is
 // approximately every 4 years.
 func CalcBlockSubsidy(height int32, chainParams *chaincfg.Params) int64 {
-	if chainParams.SubsidyReductionInterval == 0 {
-		return baseSubsidy
-	}
 
-	// Equivalent to: baseSubsidy / 2^(height/subsidyHalvingInterval)
-	return baseSubsidy >> uint(height/chainParams.SubsidyReductionInterval)
+	if height == 0 {
+		return 17500000 * btcutil.SatoshiPerBitcoin
+	} else if height > 0 && height <= 200 {
+		return 2500 * btcutil.SatoshiPerBitcoin
+	} else if height > 200 && height <= 775600 {
+		return 7 * btcutil.SatoshiPerBitcoin
+	} else if height > 775600 && height <= 1043999 {
+		return 4.5 * btcutil.SatoshiPerBitcoin
+	} else if height > 1043999 && height <= 1562398 {
+		return 3.6 * btcutil.SatoshiPerBitcoin
+	} else {
+		return 2.7 * btcutil.SatoshiPerBitcoin
+	}
 }
 
 // CheckTransactionSanity performs some preliminary checks on a transaction to
@@ -739,16 +743,13 @@ func (b *BlockChain) checkBlockContext(block *btcutil.Block, prevNode *blockNode
 		// Obtain the latest state of the deployed CSV soft-fork in
 		// order to properly guard the new validation behavior based on
 		// the current BIP 9 version bits state.
-		csvState, err := b.deploymentState(prevNode, chaincfg.DeploymentCSV)
-		if err != nil {
-			return err
-		}
+		csvState := false
 
 		// Once the CSV soft-fork is fully active, we'll switch to
 		// using the current median time past of the past block's
 		// timestamps for all lock-time based checks.
 		blockTime := header.Timestamp
-		if csvState == ThresholdActive {
+		if csvState {
 			blockTime = prevNode.CalcPastMedianTime()
 		}
 
@@ -784,15 +785,11 @@ func (b *BlockChain) checkBlockContext(block *btcutil.Block, prevNode *blockNode
 		// Query for the Version Bits state for the segwit soft-fork
 		// deployment. If segwit is active, we'll switch over to
 		// enforcing all the new rules.
-		segwitState, err := b.deploymentState(prevNode,
-			chaincfg.DeploymentSegwit)
-		if err != nil {
-			return err
-		}
+		segwitState := false
 
 		// If segwit is active, then we'll need to fully validate the
 		// new witness commitment for adherance to the rules.
-		if segwitState == ThresholdActive {
+		if segwitState {
 			// Validate the witness commitment (if any) within the
 			// block.  This involves asserting that if the coinbase
 			// contains the special commitment output, then this
@@ -1050,11 +1047,7 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *btcutil.Block, vi
 	// Query for the Version Bits state for the segwit soft-fork
 	// deployment. If segwit is active, we'll switch over to enforcing all
 	// the new rules.
-	segwitState, err := b.deploymentState(node.parent, chaincfg.DeploymentSegwit)
-	if err != nil {
-		return err
-	}
-	enforceSegWit := segwitState == ThresholdActive
+	enforceSegWit := false
 
 	// The number of signature operations must be less than the maximum
 	// allowed per block.  Note that the preliminary sanity checks on a
@@ -1175,11 +1168,8 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *btcutil.Block, vi
 
 	// Enforce CHECKSEQUENCEVERIFY during all block validation checks once
 	// the soft-fork deployment is fully active.
-	csvState, err := b.deploymentState(node.parent, chaincfg.DeploymentCSV)
-	if err != nil {
-		return err
-	}
-	if csvState == ThresholdActive {
+	csvState := false
+	if csvState {
 		// If the CSV soft-fork is now active, then modify the
 		// scriptFlags to ensure that the CSV op code is properly
 		// validated during the script checks bleow.

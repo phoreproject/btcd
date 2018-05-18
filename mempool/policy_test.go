@@ -293,7 +293,7 @@ func TestCheckTransactionStandard(t *testing.T) {
 	}
 	addrHash := [20]byte{0x01}
 	addr, err := btcutil.NewAddressPubKeyHash(addrHash[:],
-		&chaincfg.TestNet3Params)
+		&chaincfg.MainNetParams)
 	if err != nil {
 		t.Fatalf("NewAddressPubKeyHash: unexpected error: %v", err)
 	}

@@ -130,9 +130,20 @@ type Params struct {
 	// coins (coinbase transactions) can be spent.
 	CoinbaseMaturity uint16
 
-	// SubsidyReductionInterval is the interval of blocks before the subsidy
-	// is reduced.
-	SubsidyReductionInterval int32
+	// MaxReorganizationDepth is the maximum number of blocks to rewind for
+	// a reorganization of the chain.
+	MaxReorganizationDepth uint16
+
+	// MasternodeDriftCount is the number of masternodes by which a node can
+	// differ to assist consensus.
+	MasternodeDriftCount uint16
+
+	// Last block in which a proof-of-work block is valid. After POW, PoS is
+	// activated.
+	LastPoWBlock uint32
+
+	// Height of the first block in which Zeroocin transactions are valid.
+	ZerocoinStartHeight uint32
 
 	// TargetTimespan is the desired amount of time that should elapse
 	// before the block difficulty requirement is examined to determine how
@@ -167,23 +178,6 @@ type Params struct {
 	// Checkpoints ordered from oldest to newest.
 	Checkpoints []Checkpoint
 
-	// These fields are related to voting on consensus rule changes as
-	// defined by BIP0009.
-	//
-	// RuleChangeActivationThreshold is the number of blocks in a threshold
-	// state retarget window for which a positive vote for a rule change
-	// must be cast in order to lock in a rule change. It should typically
-	// be 95% for the main network and 75% for test networks.
-	//
-	// MinerConfirmationWindow is the number of blocks in each threshold
-	// state retarget window.
-	//
-	// Deployments define the specific consensus rule changes to be voted
-	// on.
-	RuleChangeActivationThreshold uint32
-	MinerConfirmationWindow       uint32
-	Deployments                   [DefinedDeployments]ConsensusDeployment
-
 	// Mempool parameters
 	RelayNonStdTxs bool
 
@@ -214,15 +208,7 @@ var MainNetParams = Params{
 	DefaultPort: "11771",
 	DNSSeeds: []DNSSeed{
 		{"dns0.phore.io", true},
-		{"dns1.phore.io", true},
-		{"dns2.phore.io", true},
-		{"dns3.phore.io", true},
-		{"dns4.phore.io", true},
-		{"dns5.phore.io", true},
-		{"dns6.phore.io", true},
-		{"dns7.phore.io", true},
-		{"dns8.phore.io", true},
-		{"dns9.phore.io", true},
+		{"phore.seed.rho.industries", true},
 	},
 
 	// Chain parameters
@@ -230,51 +216,28 @@ var MainNetParams = Params{
 	GenesisHash:              &genesisHash,
 	PowLimit:                 mainPowLimit,
 	PowLimitBits:             0x1d00ffff,
-	BIP0034Height:            227931, // 000000000000024b89b42a942fe0d9fea3bb44ab7bd1b19115dd6a759c0808b8
-	BIP0065Height:            388381, // 000000000000000004c2b624ed5d7756c508d90fd0da2c7c679febfa6c4735f0
-	BIP0066Height:            363725, // 00000000000000000379eaa19dce8c9b722d46ae6a57c2f1a988119488b50931
-	CoinbaseMaturity:         100,
-	SubsidyReductionInterval: 210000,
-	TargetTimespan:           time.Hour * 24 * 14, // 14 days
-	TargetTimePerBlock:       time.Minute * 10,    // 10 minutes
-	RetargetAdjustmentFactor: 4,                   // 25% less, 400% more
+	BIP0034Height:            0, // 000000000000024b89b42a942fe0d9fea3bb44ab7bd1b19115dd6a759c0808b8
+	BIP0065Height:            0, // 000000000000000004c2b624ed5d7756c508d90fd0da2c7c679febfa6c4735f0
+	BIP0066Height:            0, // 00000000000000000379eaa19dce8c9b722d46ae6a57c2f1a988119488b50931
+	CoinbaseMaturity:         50,
+	TargetTimespan:           time.Minute, // 1 minute
+	TargetTimePerBlock:       time.Minute, // 1 minutes
+	RetargetAdjustmentFactor: 4,           // 25% less, 400% more
 	ReduceMinDifficulty:      false,
 	MinDiffReductionTime:     0,
-	GenerateSupported:        false,
+	GenerateSupported:        true,
+	MasternodeDriftCount:     20,
+	LastPoWBlock:             200,
 
 	// Checkpoints ordered from oldest to newest.
 	Checkpoints: []Checkpoint{},
-
-	// Consensus rule change deployments.
-	//
-	// The miner confirmation window is defined as:
-	//   target proof of work timespan / target proof of work spacing
-	RuleChangeActivationThreshold: 1916, // 95% of MinerConfirmationWindow
-	MinerConfirmationWindow:       2016, //
-	Deployments: [DefinedDeployments]ConsensusDeployment{
-		DeploymentTestDummy: {
-			BitNumber:  28,
-			StartTime:  1199145601, // January 1, 2008 UTC
-			ExpireTime: 1230767999, // December 31, 2008 UTC
-		},
-		DeploymentCSV: {
-			BitNumber:  0,
-			StartTime:  1462060800, // May 1st, 2016
-			ExpireTime: 1493596800, // May 1st, 2017
-		},
-		DeploymentSegwit: {
-			BitNumber:  1,
-			StartTime:  1479168000, // November 15, 2016 UTC
-			ExpireTime: 1510704000, // November 15, 2017 UTC.
-		},
-	},
 
 	// Mempool parameters
 	RelayNonStdTxs: false,
 
 	// Human-readable part for Bech32 encoded segwit addresses, as defined in
 	// BIP 173.
-	Bech32HRPSegwit: "bc", // always bc for main net
+	Bech32HRPSegwit: "ph", // always bc for main net
 
 	// Address encoding magics
 	PubKeyHashAddrID: 0x37, // starts with 1
@@ -287,7 +250,7 @@ var MainNetParams = Params{
 
 	// BIP44 coin type used in the hierarchical deterministic path for
 	// address generation.
-	HDCoinType: 0x80000013,
+	HDCoinType: 0x800001bc,
 }
 
 var (

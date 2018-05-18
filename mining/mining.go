@@ -609,11 +609,7 @@ mempoolLoop:
 	// so then this means that we'll include any transactions with witness
 	// data in the mempool, and also add the witness commitment as an
 	// OP_RETURN output in the coinbase transaction.
-	segwitState, err := g.chain.ThresholdState(chaincfg.DeploymentSegwit)
-	if err != nil {
-		return nil, err
-	}
-	segwitActive := segwitState == blockchain.ThresholdActive
+	segwitActive := false
 
 	witnessIncluded := false
 
@@ -853,10 +849,7 @@ mempoolLoop:
 
 	// Calculate the next expected block version based on the state of the
 	// rule change deployments.
-	nextBlockVersion, err := g.chain.CalcNextBlockVersion()
-	if err != nil {
-		return nil, err
-	}
+	nextBlockVersion := g.chain.CalcNextBlockVersion()
 
 	// Create a new block ready to be solved.
 	merkles := blockchain.BuildMerkleTreeStore(blockTxns, false)

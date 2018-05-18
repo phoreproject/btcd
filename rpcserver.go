@@ -27,6 +27,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/btcsuite/websocket"
 	"github.com/phoreproject/btcd/blockchain"
 	"github.com/phoreproject/btcd/blockchain/indexers"
 	"github.com/phoreproject/btcd/btcec"
@@ -41,7 +42,6 @@ import (
 	"github.com/phoreproject/btcd/txscript"
 	"github.com/phoreproject/btcd/wire"
 	"github.com/phoreproject/btcutil"
-	"github.com/btcsuite/websocket"
 )
 
 // API version constants
@@ -1135,25 +1135,6 @@ func handleGetBlock(s *rpcServer, cmd interface{}, closeChan <-chan struct{}) (i
 	return blockReply, nil
 }
 
-// softForkStatus converts a ThresholdState state into a human readable string
-// corresponding to the particular state.
-func softForkStatus(state blockchain.ThresholdState) (string, error) {
-	switch state {
-	case blockchain.ThresholdDefined:
-		return "defined", nil
-	case blockchain.ThresholdStarted:
-		return "started", nil
-	case blockchain.ThresholdLockedIn:
-		return "lockedin", nil
-	case blockchain.ThresholdActive:
-		return "active", nil
-	case blockchain.ThresholdFailed:
-		return "failed", nil
-	default:
-		return "", fmt.Errorf("unknown deployment state: %v", state)
-	}
-}
-
 // handleGetBlockChainInfo implements the getblockchaininfo command.
 func handleGetBlockChainInfo(s *rpcServer, cmd interface{}, closeChan <-chan struct{}) (interface{}, error) {
 	// Obtain a snapshot of the current best known blockchain state. We'll
@@ -1205,60 +1186,6 @@ func handleGetBlockChainInfo(s *rpcServer, cmd interface{}, closeChan <-chan str
 				Status: height >= params.BIP0065Height,
 			},
 		},
-	}
-
-	// Finally, query the BIP0009 version bits state for all currently
-	// defined BIP0009 soft-fork deployments.
-	for deployment, deploymentDetails := range params.Deployments {
-		// Map the integer deployment ID into a human readable
-		// fork-name.
-		var forkName string
-		switch deployment {
-		case chaincfg.DeploymentTestDummy:
-			forkName = "dummy"
-
-		case chaincfg.DeploymentCSV:
-			forkName = "csv"
-
-		case chaincfg.DeploymentSegwit:
-			forkName = "segwit"
-
-		default:
-			return nil, &btcjson.RPCError{
-				Code: btcjson.ErrRPCInternal.Code,
-				Message: fmt.Sprintf("Unknown deployment %v "+
-					"detected", deployment),
-			}
-		}
-
-		// Query the chain for the current status of the deployment as
-		// identified by its deployment ID.
-		deploymentStatus, err := chain.ThresholdState(uint32(deployment))
-		if err != nil {
-			context := "Failed to obtain deployment status"
-			return nil, internalRPCError(err.Error(), context)
-		}
-
-		// Attempt to convert the current deployment status into a
-		// human readable string. If the status is unrecognized, then a
-		// non-nil error is returned.
-		statusString, err := softForkStatus(deploymentStatus)
-		if err != nil {
-			return nil, &btcjson.RPCError{
-				Code: btcjson.ErrRPCInternal.Code,
-				Message: fmt.Sprintf("unknown deployment status: %v",
-					deploymentStatus),
-			}
-		}
-
-		// Finally, populate the soft-fork description with all the
-		// information gathered above.
-		chainInfo.Bip9SoftForks[forkName] = &btcjson.Bip9SoftForkDescription{
-			Status:    strings.ToLower(statusString),
-			Bit:       deploymentDetails.BitNumber,
-			StartTime: int64(deploymentDetails.StartTime),
-			Timeout:   int64(deploymentDetails.ExpireTime),
-		}
 	}
 
 	return chainInfo, nil

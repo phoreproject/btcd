@@ -9,12 +9,11 @@ import (
 	"os"
 	"path/filepath"
 
+	flags "github.com/jessevdk/go-flags"
 	"github.com/phoreproject/btcd/chaincfg"
 	"github.com/phoreproject/btcd/database"
 	_ "github.com/phoreproject/btcd/database/ffldb"
-	"github.com/phoreproject/btcd/wire"
 	"github.com/phoreproject/btcutil"
-	flags "github.com/jessevdk/go-flags"
 )
 
 const (
@@ -76,12 +75,7 @@ func validDbType(dbType string) bool {
 // "testnet3" is planned for the future, at which point this function can be
 // removed and the network parameter's name used instead.
 func netName(chainParams *chaincfg.Params) string {
-	switch chainParams.Net {
-	case wire.TestNet3:
-		return "testnet"
-	default:
-		return chainParams.Name
-	}
+	return chainParams.Name
 }
 
 // loadConfig initializes and parses the config using command line options.
@@ -111,15 +105,11 @@ func loadConfig() (*config, []string, error) {
 	// while we're at it
 	if cfg.TestNet3 {
 		numNets++
-		activeNetParams = &chaincfg.TestNet3Params
+		activeNetParams = &chaincfg.MainNetParams
 	}
 	if cfg.RegressionTest {
 		numNets++
-		activeNetParams = &chaincfg.RegressionNetParams
-	}
-	if cfg.SimNet {
-		numNets++
-		activeNetParams = &chaincfg.SimNetParams
+		activeNetParams = &chaincfg.MainNetParams
 	}
 	if numNets > 1 {
 		str := "%s: The testnet, regtest, and simnet params can't be " +

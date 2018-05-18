@@ -20,6 +20,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/btcsuite/go-socks/socks"
+	flags "github.com/jessevdk/go-flags"
 	"github.com/phoreproject/btcd/blockchain"
 	"github.com/phoreproject/btcd/chaincfg"
 	"github.com/phoreproject/btcd/chaincfg/chainhash"
@@ -28,8 +30,6 @@ import (
 	_ "github.com/phoreproject/btcd/database/ffldb"
 	"github.com/phoreproject/btcd/mempool"
 	"github.com/phoreproject/btcutil"
-	"github.com/btcsuite/go-socks/socks"
-	flags "github.com/jessevdk/go-flags"
 )
 
 const (
@@ -526,20 +526,20 @@ func loadConfig() (*config, []string, error) {
 	numNets := 0
 	// Count number of network flags passed; assign active network params
 	// while we're at it
-	if cfg.TestNet3 {
-		numNets++
-		activeNetParams = &testNet3Params
-	}
-	if cfg.RegressionTest {
-		numNets++
-		activeNetParams = &regressionNetParams
-	}
-	if cfg.SimNet {
-		numNets++
-		// Also disable dns seeding on the simulation test network.
-		activeNetParams = &simNetParams
-		cfg.DisableDNSSeed = true
-	}
+	// if cfg.TestNet3 {
+	// 	numNets++
+	// 	activeNetParams = &testNet3Params
+	// }
+	// if cfg.RegressionTest {
+	// 	numNets++
+	// 	activeNetParams = &regressionNetParams
+	// }
+	// if cfg.SimNet {
+	// 	numNets++
+	// 	// Also disable dns seeding on the simulation test network.
+	// 	activeNetParams = &simNetParams
+	// 	cfg.DisableDNSSeed = true
+	// }
 	if numNets > 1 {
 		str := "%s: The testnet, regtest, segnet, and simnet params " +
 			"can't be used together -- choose one of the four"

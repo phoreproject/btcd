@@ -395,14 +395,7 @@ func (sp *serverPeer) OnVersion(_ *peer.Peer, msg *wire.MsgVersion) {
 			// After soft-fork activation, only make outbound
 			// connection to peers if they flag that they're segwit
 			// enabled.
-			chain := sp.server.chain
-			segwitActive, err := chain.IsDeploymentActive(chaincfg.DeploymentSegwit)
-			if err != nil {
-				peerLog.Errorf("Unable to query for segwit "+
-					"soft-fork state: %v", err)
-				return
-			}
-
+			segwitActive := false
 			if segwitActive && !sp.IsWitnessEnabled() {
 				peerLog.Infof("Disconnecting non-segwit "+
 					"peer %v, isn't segwit enabled and "+
@@ -2267,10 +2260,9 @@ func newServer(listenAddrs []string, db database.DB, chainParams *chaincfg.Param
 		CalcSequenceLock: func(tx *btcutil.Tx, view *blockchain.UtxoViewpoint) (*blockchain.SequenceLock, error) {
 			return s.chain.CalcSequenceLock(tx, view, true)
 		},
-		IsDeploymentActive: s.chain.IsDeploymentActive,
-		SigCache:           s.sigCache,
-		HashCache:          s.hashCache,
-		AddrIndex:          s.addrIndex,
+		SigCache:  s.sigCache,
+		HashCache: s.hashCache,
+		AddrIndex: s.addrIndex,
 	}
 	s.txMemPool = mempool.New(&txC)
 

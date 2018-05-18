@@ -151,23 +151,6 @@ type BlockChain struct {
 	stateLock     sync.RWMutex
 	stateSnapshot *BestState
 
-	// The following caches are used to efficiently keep track of the
-	// current deployment threshold state of each rule change deployment.
-	//
-	// This information is stored in the database so it can be quickly
-	// reconstructed on load.
-	//
-	// warningCaches caches the current deployment threshold state for blocks
-	// in each of the **possible** deployments.  This is used in order to
-	// detect when new unrecognized rule changes are being voted on and/or
-	// have been activated such as will be the case when older versions of
-	// the software are being used
-	//
-	// deploymentCaches caches the current deployment threshold state for
-	// blocks in each of the actively defined deployments.
-	warningCaches    []thresholdStateCache
-	deploymentCaches []thresholdStateCache
-
 	// The following fields are used to determine if certain warnings have
 	// already been shown.
 	//
@@ -373,14 +356,7 @@ func (b *BlockChain) calcSequenceLock(node *blockNode, tx *btcutil.Tx, utxoView 
 	// If we're performing block validation, then we need to query the BIP9
 	// state.
 	if !csvSoftforkActive {
-		// Obtain the latest BIP9 version bits state for the
-		// CSV-package soft-fork deployment. The adherence of sequence
-		// locks depends on the current soft-fork state.
-		csvState, err := b.deploymentState(node.parent, chaincfg.DeploymentCSV)
-		if err != nil {
-			return nil, err
-		}
-		csvSoftforkActive = csvState == ThresholdActive
+		csvSoftforkActive = false
 	}
 
 	// If the transaction's version is less than 2, and BIP 68 has not yet
@@ -594,9 +570,7 @@ func (b *BlockChain) connectBlock(node *blockNode, block *btcutil.Block, view *U
 
 		// Warn if a high enough percentage of the last blocks have
 		// unexpected versions.
-		if err := b.warnUnknownVersions(node); err != nil {
-			return err
-		}
+		b.warnUnknownVersions(node)
 	}
 
 	// Generate a new best state snapshot that will be used to update the
@@ -1590,8 +1564,6 @@ func New(config *Config) (*BlockChain, error) {
 		bestChain:           newChainView(nil),
 		orphans:             make(map[chainhash.Hash]*orphanBlock),
 		prevOrphans:         make(map[chainhash.Hash][]*orphanBlock),
-		warningCaches:       newThresholdCaches(vbNumBits),
-		deploymentCaches:    newThresholdCaches(chaincfg.DefinedDeployments),
 	}
 
 	// Initialize the chain state from the passed database.  When the db
@@ -1608,11 +1580,6 @@ func New(config *Config) (*BlockChain, error) {
 		if err != nil {
 			return nil, err
 		}
-	}
-
-	// Initialize rule change threshold state caches.
-	if err := b.initThresholdCaches(); err != nil {
-		return nil, err
 	}
 
 	bestNode := b.bestChain.Tip()
