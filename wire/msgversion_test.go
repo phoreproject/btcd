@@ -130,7 +130,6 @@ func TestVersion(t *testing.T) {
 // protocol versions.
 func TestVersionWire(t *testing.T) {
 	// verRelayTxFalse and verRelayTxFalseEncoded is a version message as of
-	// BIP0037Version with the transaction relay disabled.
 	baseVersionBIP0037Copy := *baseVersionBIP0037
 	verRelayTxFalse := &baseVersionBIP0037Copy
 	verRelayTxFalse.DisableRelayTx = true
@@ -151,62 +150,6 @@ func TestVersionWire(t *testing.T) {
 			baseVersionBIP0037,
 			baseVersionBIP0037Encoded,
 			ProtocolVersion,
-			BaseEncoding,
-		},
-
-		// Protocol version BIP0037Version with relay transactions field
-		// true.
-		{
-			baseVersionBIP0037,
-			baseVersionBIP0037,
-			baseVersionBIP0037Encoded,
-			BIP0037Version,
-			BaseEncoding,
-		},
-
-		// Protocol version BIP0037Version with relay transactions field
-		// false.
-		{
-			verRelayTxFalse,
-			verRelayTxFalse,
-			verRelayTxFalseEncoded,
-			BIP0037Version,
-			BaseEncoding,
-		},
-
-		// Protocol version BIP0035Version.
-		{
-			baseVersion,
-			baseVersion,
-			baseVersionEncoded,
-			BIP0035Version,
-			BaseEncoding,
-		},
-
-		// Protocol version BIP0031Version.
-		{
-			baseVersion,
-			baseVersion,
-			baseVersionEncoded,
-			BIP0031Version,
-			BaseEncoding,
-		},
-
-		// Protocol version NetAddressTimeVersion.
-		{
-			baseVersion,
-			baseVersion,
-			baseVersionEncoded,
-			NetAddressTimeVersion,
-			BaseEncoding,
-		},
-
-		// Protocol version MultipleAddressVersion.
-		{
-			baseVersion,
-			baseVersion,
-			baseVersionEncoded,
-			MultipleAddressVersion,
 			BaseEncoding,
 		},
 	}
@@ -311,12 +254,6 @@ func TestVersionWireErrors(t *testing.T) {
 		{baseVersion, baseVersionEncoded, pver, BaseEncoding, 82, io.ErrShortWrite, io.ErrUnexpectedEOF},
 		// Force error in last block.
 		{baseVersion, baseVersionEncoded, pver, BaseEncoding, 98, io.ErrShortWrite, io.ErrUnexpectedEOF},
-		// Force error in relay tx - no read error should happen since
-		// it's optional.
-		{
-			baseVersionBIP0037, baseVersionBIP0037Encoded,
-			BIP0037Version, BaseEncoding, 101, io.ErrShortWrite, nil,
-		},
 		// Force error due to user agent too big
 		{exceedUAVer, exceedUAVerEncoded, pver, BaseEncoding, newLen, wireErr, wireErr},
 	}
@@ -514,51 +451,4 @@ var baseVersionEncoded = []byte{
 	0x2f, 0x62, 0x74, 0x63, 0x64, 0x74, 0x65, 0x73,
 	0x74, 0x3a, 0x30, 0x2e, 0x30, 0x2e, 0x31, 0x2f, // User agent
 	0xfa, 0x92, 0x03, 0x00, // Last block
-}
-
-// baseVersionBIP0037 is used in the various tests as a baseline MsgVersion for
-// BIP0037.
-var baseVersionBIP0037 = &MsgVersion{
-	ProtocolVersion: 70001,
-	Services:        SFNodeNetwork,
-	Timestamp:       time.Unix(0x495fab29, 0), // 2009-01-03 12:15:05 -0600 CST)
-	AddrYou: NetAddress{
-		Timestamp: time.Time{}, // Zero value -- no timestamp in version
-		Services:  SFNodeNetwork,
-		IP:        net.ParseIP("192.168.0.1"),
-		Port:      8333,
-	},
-	AddrMe: NetAddress{
-		Timestamp: time.Time{}, // Zero value -- no timestamp in version
-		Services:  SFNodeNetwork,
-		IP:        net.ParseIP("127.0.0.1"),
-		Port:      8333,
-	},
-	Nonce:     123123, // 0x1e0f3
-	UserAgent: "/btcdtest:0.0.1/",
-	LastBlock: 234234, // 0x392fa
-}
-
-// baseVersionBIP0037Encoded is the wire encoded bytes for baseVersionBIP0037
-// using protocol version BIP0037Version and is used in the various tests.
-var baseVersionBIP0037Encoded = []byte{
-	0x71, 0x11, 0x01, 0x00, // Protocol version 70001
-	0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // SFNodeNetwork
-	0x29, 0xab, 0x5f, 0x49, 0x00, 0x00, 0x00, 0x00, // 64-bit Timestamp
-	// AddrYou -- No timestamp for NetAddress in version message
-	0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // SFNodeNetwork
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0xff, 0xff, 0xc0, 0xa8, 0x00, 0x01, // IP 192.168.0.1
-	0x20, 0x8d, // Port 8333 in big-endian
-	// AddrMe -- No timestamp for NetAddress in version message
-	0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // SFNodeNetwork
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0xff, 0xff, 0x7f, 0x00, 0x00, 0x01, // IP 127.0.0.1
-	0x20, 0x8d, // Port 8333 in big-endian
-	0xf3, 0xe0, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, // Nonce
-	0x10, // Varint for user agent length
-	0x2f, 0x62, 0x74, 0x63, 0x64, 0x74, 0x65, 0x73,
-	0x74, 0x3a, 0x30, 0x2e, 0x30, 0x2e, 0x31, 0x2f, // User agent
-	0xfa, 0x92, 0x03, 0x00, // Last block
-	0x01, // Relay tx
 }

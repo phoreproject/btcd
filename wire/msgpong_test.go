@@ -64,52 +64,6 @@ func TestPongLatest(t *testing.T) {
 	}
 }
 
-// TestPongBIP0031 tests the MsgPong API against the protocol version
-// BIP0031Version.
-func TestPongBIP0031(t *testing.T) {
-	// Use the protocol version just prior to BIP0031Version changes.
-	pver := BIP0031Version
-	enc := BaseEncoding
-
-	nonce, err := RandomUint64()
-	if err != nil {
-		t.Errorf("Error generating nonce: %v", err)
-	}
-	msg := NewMsgPong(nonce)
-	if msg.Nonce != nonce {
-		t.Errorf("Should get same nonce back out.")
-	}
-
-	// Ensure max payload is expected value for old protocol version.
-	size := msg.MaxPayloadLength(pver)
-	if size != 0 {
-		t.Errorf("Max length should be 0 for pong protocol version %d.",
-			pver)
-	}
-
-	// Test encode with old protocol version.
-	var buf bytes.Buffer
-	err = msg.BtcEncode(&buf, pver, enc)
-	if err == nil {
-		t.Errorf("encode of MsgPong succeeded when it shouldn't have %v",
-			msg)
-	}
-
-	// Test decode with old protocol version.
-	readmsg := NewMsgPong(0)
-	err = readmsg.BtcDecode(&buf, pver, enc)
-	if err == nil {
-		t.Errorf("decode of MsgPong succeeded when it shouldn't have %v",
-			spew.Sdump(buf))
-	}
-
-	// Since this protocol version doesn't support pong, make sure the
-	// nonce didn't get encoded and decoded back out.
-	if msg.Nonce == readmsg.Nonce {
-		t.Errorf("Should not get same nonce for protocol version %d", pver)
-	}
-}
-
 // TestPongCrossProtocol tests the MsgPong API when encoding with the latest
 // protocol version and decoding with BIP0031Version.
 func TestPongCrossProtocol(t *testing.T) {
@@ -127,20 +81,6 @@ func TestPongCrossProtocol(t *testing.T) {
 	err = msg.BtcEncode(&buf, ProtocolVersion, BaseEncoding)
 	if err != nil {
 		t.Errorf("encode of MsgPong failed %v err <%v>", msg, err)
-	}
-
-	// Decode with old protocol version.
-	readmsg := NewMsgPong(0)
-	err = readmsg.BtcDecode(&buf, BIP0031Version, BaseEncoding)
-	if err == nil {
-		t.Errorf("encode of MsgPong succeeded when it shouldn't have %v",
-			msg)
-	}
-
-	// Since one of the protocol versions doesn't support the pong message,
-	// make sure the nonce didn't get encoded and decoded back out.
-	if msg.Nonce == readmsg.Nonce {
-		t.Error("Should not get same nonce for cross protocol")
 	}
 }
 
@@ -160,15 +100,6 @@ func TestPongWire(t *testing.T) {
 			MsgPong{Nonce: 123123}, // 0x1e0f3
 			[]byte{0xf3, 0xe0, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00},
 			ProtocolVersion,
-			BaseEncoding,
-		},
-
-		// Protocol version BIP0031Version+1
-		{
-			MsgPong{Nonce: 456456}, // 0x6f708
-			MsgPong{Nonce: 456456}, // 0x6f708
-			[]byte{0x08, 0xf7, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00},
-			BIP0031Version + 1,
 			BaseEncoding,
 		},
 	}

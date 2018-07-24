@@ -129,14 +129,6 @@ func TestMerkleBlockCrossProtocol(t *testing.T) {
 		t.Errorf("encode of NewMsgFilterLoad failed %v err <%v>", msg,
 			err)
 	}
-
-	// Decode with old protocol version.
-	var readmsg MsgFilterLoad
-	err = readmsg.BtcDecode(&buf, BIP0031Version, BaseEncoding)
-	if err == nil {
-		t.Errorf("decode of MsgFilterLoad succeeded when it shouldn't have %v",
-			msg)
-	}
 }
 
 // TestMerkleBlockWire tests the MsgMerkleBlock wire encode and decode for
@@ -153,12 +145,6 @@ func TestMerkleBlockWire(t *testing.T) {
 		{
 			&merkleBlockOne, &merkleBlockOne, merkleBlockOneBytes,
 			ProtocolVersion, BaseEncoding,
-		},
-
-		// Protocol version BIP0037Version.
-		{
-			&merkleBlockOne, &merkleBlockOne, merkleBlockOneBytes,
-			BIP0037Version, BaseEncoding,
 		},
 	}
 
@@ -200,7 +186,6 @@ func TestMerkleBlockWireErrors(t *testing.T) {
 	// because the test data is using bytes encoded with that protocol
 	// version.
 	pver := uint32(70001)
-	pverNoMerkleBlock := BIP0037Version - 1
 	wireErr := &MessageError{}
 
 	tests := []struct {
@@ -266,11 +251,6 @@ func TestMerkleBlockWireErrors(t *testing.T) {
 		{
 			&merkleBlockOne, merkleBlockOneBytes, pver, BaseEncoding, 118,
 			io.ErrShortWrite, io.EOF,
-		},
-		// Force error due to unsupported protocol version.
-		{
-			&merkleBlockOne, merkleBlockOneBytes, pverNoMerkleBlock,
-			BaseEncoding, 119, wireErr, wireErr,
 		},
 	}
 

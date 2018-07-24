@@ -126,47 +126,7 @@ func TestBlockWire(t *testing.T) {
 			ProtocolVersion,
 			BaseEncoding,
 		},
-
-		// Protocol version BIP0035Version.
-		{
-			&blockOne,
-			&blockOne,
-			blockOneBytes,
-			blockOneTxLocs,
-			BIP0035Version,
-			BaseEncoding,
-		},
-
-		// Protocol version BIP0031Version.
-		{
-			&blockOne,
-			&blockOne,
-			blockOneBytes,
-			blockOneTxLocs,
-			BIP0031Version,
-			BaseEncoding,
-		},
-
-		// Protocol version NetAddressTimeVersion.
-		{
-			&blockOne,
-			&blockOne,
-			blockOneBytes,
-			blockOneTxLocs,
-			NetAddressTimeVersion,
-			BaseEncoding,
-		},
-
-		// Protocol version MultipleAddressVersion.
-		{
-			&blockOne,
-			&blockOne,
-			blockOneBytes,
-			blockOneTxLocs,
-			MultipleAddressVersion,
-			BaseEncoding,
-		},
-		// TODO(roasbeef): add case for witnessy block
+		// TODO(roasbeef): add case for witness block
 	}
 
 	t.Logf("Running %d tests", len(tests))

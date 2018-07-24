@@ -14,16 +14,7 @@ import (
 // maxNetAddressPayload returns the max payload size for a bitcoin NetAddress
 // based on the protocol version.
 func maxNetAddressPayload(pver uint32) uint32 {
-	// Services 8 bytes + ip 16 bytes + port 2 bytes.
-	plen := uint32(26)
-
-	// NetAddressTimeVersion added a timestamp field.
-	if pver >= NetAddressTimeVersion {
-		// Timestamp 4 bytes.
-		plen += 4
-	}
-
-	return plen
+	return 30
 }
 
 // NetAddress defines information about a peer on the network including the time
@@ -94,14 +85,12 @@ func readNetAddress(r io.Reader, pver uint32, na *NetAddress, ts bool) error {
 	// NOTE: The bitcoin protocol uses a uint32 for the timestamp so it will
 	// stop working somewhere around 2106.  Also timestamp wasn't added until
 	// protocol version >= NetAddressTimeVersion
-	if ts && pver >= NetAddressTimeVersion {
-		err := readElement(r, (*uint32Time)(&na.Timestamp))
-		if err != nil {
-			return err
-		}
+	err := readElement(r, (*uint32Time)(&na.Timestamp))
+	if err != nil {
+		return err
 	}
 
-	err := readElements(r, &na.Services, &ip)
+	err = readElements(r, &na.Services, &ip)
 	if err != nil {
 		return err
 	}
@@ -127,11 +116,9 @@ func writeNetAddress(w io.Writer, pver uint32, na *NetAddress, ts bool) error {
 	// NOTE: The bitcoin protocol uses a uint32 for the timestamp so it will
 	// stop working somewhere around 2106.  Also timestamp wasn't added until
 	// until protocol version >= NetAddressTimeVersion.
-	if ts && pver >= NetAddressTimeVersion {
-		err := writeElement(w, uint32(na.Timestamp.Unix()))
-		if err != nil {
-			return err
-		}
+	err := writeElement(w, uint32(na.Timestamp.Unix()))
+	if err != nil {
+		return err
 	}
 
 	// Ensure to always write 16 bytes even if the ip is nil.
@@ -139,7 +126,7 @@ func writeNetAddress(w io.Writer, pver uint32, na *NetAddress, ts bool) error {
 	if na.IP != nil {
 		copy(ip[:], na.IP.To16())
 	}
-	err := writeElements(w, na.Services, ip)
+	err = writeElements(w, na.Services, ip)
 	if err != nil {
 		return err
 	}

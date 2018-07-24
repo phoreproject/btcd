@@ -419,9 +419,7 @@ func (sp *serverPeer) OnVersion(_ *peer.Peer, msg *wire.MsgVersion) {
 			// Request known addresses if the server address manager needs
 			// more and the peer has a protocol version new enough to
 			// include a timestamp with addresses.
-			hasTimestamp := sp.ProtocolVersion() >=
-				wire.NetAddressTimeVersion
-			if addrManager.NeedMoreAddresses() && hasTimestamp {
+			if addrManager.NeedMoreAddresses() {
 				sp.QueueMessage(wire.NewMsgGetAddr(), nil)
 			}
 
@@ -552,13 +550,10 @@ func (sp *serverPeer) OnInv(_ *peer.Peer, msg *wire.MsgInv) {
 		if invVect.Type == wire.InvTypeTx {
 			peerLog.Tracef("Ignoring tx %v in inv from %v -- "+
 				"blocksonly enabled", invVect.Hash, sp)
-			if sp.ProtocolVersion() >= wire.BIP0037Version {
-				peerLog.Infof("Peer %v is announcing "+
-					"transactions -- disconnecting", sp)
-				sp.Disconnect()
-				return
-			}
-			continue
+			peerLog.Infof("Peer %v is announcing "+
+				"transactions -- disconnecting", sp)
+			sp.Disconnect()
+			return
 		}
 		err := newInv.AddInvVect(invVect)
 		if err != nil {
@@ -744,8 +739,7 @@ func (sp *serverPeer) enforceNodeBloomFlag(cmd string) bool {
 		// whether or not banning is enabled, it is checked here as well
 		// to ensure the violation is logged and the peer is
 		// disconnected regardless.
-		if sp.ProtocolVersion() >= wire.BIP0111Version &&
-			!cfg.DisableBanning {
+		if !cfg.DisableBanning {
 
 			// Disconnect the peer regardless of whether it was
 			// banned.
@@ -884,11 +878,6 @@ func (sp *serverPeer) OnAddr(_ *peer.Peer, msg *wire.MsgAddr) {
 	// since it will not be able to learn about other peers that have not
 	// specifically been provided.
 	if cfg.SimNet {
-		return
-	}
-
-	// Ignore old style addresses which don't include a timestamp.
-	if sp.ProtocolVersion() < wire.NetAddressTimeVersion {
 		return
 	}
 

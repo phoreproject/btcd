@@ -93,42 +93,6 @@ func TestBlockHeaderWire(t *testing.T) {
 			ProtocolVersion,
 			BaseEncoding,
 		},
-
-		// Protocol version BIP0035Version.
-		{
-			baseBlockHdr,
-			baseBlockHdr,
-			baseBlockHdrEncoded,
-			BIP0035Version,
-			BaseEncoding,
-		},
-
-		// Protocol version BIP0031Version.
-		{
-			baseBlockHdr,
-			baseBlockHdr,
-			baseBlockHdrEncoded,
-			BIP0031Version,
-			BaseEncoding,
-		},
-
-		// Protocol version NetAddressTimeVersion.
-		{
-			baseBlockHdr,
-			baseBlockHdr,
-			baseBlockHdrEncoded,
-			NetAddressTimeVersion,
-			BaseEncoding,
-		},
-
-		// Protocol version MultipleAddressVersion.
-		{
-			baseBlockHdr,
-			baseBlockHdr,
-			baseBlockHdrEncoded,
-			MultipleAddressVersion,
-			BaseEncoding,
-		},
 	}
 
 	t.Logf("Running %d tests", len(tests))

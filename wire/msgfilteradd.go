@@ -20,7 +20,6 @@ const (
 // filteradd message.  It is used to add a data element to an existing Bloom
 // filter.
 //
-// This message was not added until protocol version BIP0037Version.
 type MsgFilterAdd struct {
 	Data []byte
 }
@@ -28,12 +27,6 @@ type MsgFilterAdd struct {
 // BtcDecode decodes r using the bitcoin protocol encoding into the receiver.
 // This is part of the Message interface implementation.
 func (msg *MsgFilterAdd) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding) error {
-	if pver < BIP0037Version {
-		str := fmt.Sprintf("filteradd message invalid for protocol "+
-			"version %d", pver)
-		return messageError("MsgFilterAdd.BtcDecode", str)
-	}
-
 	var err error
 	msg.Data, err = ReadVarBytes(r, pver, MaxFilterAddDataSize,
 		"filteradd data")
@@ -43,12 +36,6 @@ func (msg *MsgFilterAdd) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding
 // BtcEncode encodes the receiver to w using the bitcoin protocol encoding.
 // This is part of the Message interface implementation.
 func (msg *MsgFilterAdd) BtcEncode(w io.Writer, pver uint32, enc MessageEncoding) error {
-	if pver < BIP0037Version {
-		str := fmt.Sprintf("filteradd message invalid for protocol "+
-			"version %d", pver)
-		return messageError("MsgFilterAdd.BtcEncode", str)
-	}
-
 	size := len(msg.Data)
 	if size > MaxFilterAddDataSize {
 		str := fmt.Sprintf("filteradd size too large for message "+

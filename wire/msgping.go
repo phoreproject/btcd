@@ -31,11 +31,9 @@ func (msg *MsgPing) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding) err
 	// There was no nonce for BIP0031Version and earlier.
 	// NOTE: > is not a mistake here.  The BIP0031 was defined as AFTER
 	// the version unlike most others.
-	if pver > BIP0031Version {
-		err := readElement(r, &msg.Nonce)
-		if err != nil {
-			return err
-		}
+	err := readElement(r, &msg.Nonce)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -47,14 +45,7 @@ func (msg *MsgPing) BtcEncode(w io.Writer, pver uint32, enc MessageEncoding) err
 	// There was no nonce for BIP0031Version and earlier.
 	// NOTE: > is not a mistake here.  The BIP0031 was defined as AFTER
 	// the version unlike most others.
-	if pver > BIP0031Version {
-		err := writeElement(w, msg.Nonce)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return writeElement(w, msg.Nonce)
 }
 
 // Command returns the protocol command string for the message.  This is part
@@ -66,16 +57,7 @@ func (msg *MsgPing) Command() string {
 // MaxPayloadLength returns the maximum length the payload can be for the
 // receiver.  This is part of the Message interface implementation.
 func (msg *MsgPing) MaxPayloadLength(pver uint32) uint32 {
-	plen := uint32(0)
-	// There was no nonce for BIP0031Version and earlier.
-	// NOTE: > is not a mistake here.  The BIP0031 was defined as AFTER
-	// the version unlike most others.
-	if pver > BIP0031Version {
-		// Nonce 8 bytes.
-		plen += 8
-	}
-
-	return plen
+	return 8
 }
 
 // NewMsgPing returns a new bitcoin ping message that conforms to the Message
