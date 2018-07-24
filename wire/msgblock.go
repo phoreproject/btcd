@@ -41,8 +41,9 @@ type TxLoc struct {
 // block message.  It is used to deliver block and transaction information in
 // response to a getdata message (MsgGetData) for a given block hash.
 type MsgBlock struct {
-	Header       BlockHeader
-	Transactions []*MsgTx
+	Header         BlockHeader
+	Transactions   []*MsgTx
+	BlockSignature []byte
 }
 
 // AddTransaction adds a transaction to the message.
@@ -191,6 +192,12 @@ func (msg *MsgBlock) BtcEncode(w io.Writer, pver uint32, enc MessageEncoding) er
 		}
 	}
 
+	if len(msg.Transactions) > 1 && msg.Transactions[1].IsCoinStake() {
+		err = WriteVarBytes(w, pver, msg.BlockSignature)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

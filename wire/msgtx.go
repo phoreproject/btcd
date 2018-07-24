@@ -884,6 +884,12 @@ func (msg *MsgTx) PkScriptLocs() []int {
 	return pkScriptLocs
 }
 
+// IsCoinStake returns true if the transaction passes simple tests for a coin
+// stake transaction.
+func (msg *MsgTx) IsCoinStake() bool {
+	return len(msg.TxIn) > 0 && msg.TxIn[0] != nil && len(msg.TxOut) >= 2 && msg.TxOut[0] == nil
+}
+
 // NewMsgTx returns a new bitcoin tx message that conforms to the Message
 // interface.  The return instance has a default version of TxVersion and there
 // are no transaction inputs or outputs.  Also, the lock time is set to zero

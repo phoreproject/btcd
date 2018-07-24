@@ -38,6 +38,9 @@ type BlockHeader struct {
 
 	// Nonce used to generate the block.
 	Nonce uint32
+
+	// Zerocoin Accummulator checkpoint
+	AccumulatorCheckpoint chainhash.Hash
 }
 
 // blockHeaderLen is a constant that represents the number of bytes for a block
@@ -53,7 +56,11 @@ func (h *BlockHeader) BlockHash() chainhash.Hash {
 	buf := bytes.NewBuffer(make([]byte, 0, MaxBlockHeaderPayload))
 	_ = writeBlockHeader(buf, 0, h)
 
-	return chainhash.DoubleHashH(buf.Bytes())
+	if h.Version > 3 {
+		return chainhash.DoubleHashH(buf.Bytes())
+	} else {
+		return chainhash.QuarkHash(buf.Bytes())
+	}
 }
 
 // BtcDecode decodes r using the bitcoin protocol encoding into the receiver.
@@ -114,8 +121,17 @@ func NewBlockHeader(version int32, prevHash, merkleRootHash *chainhash.Hash,
 // decoding block headers stored to disk, such as in a database, as opposed to
 // decoding from the wire.
 func readBlockHeader(r io.Reader, pver uint32, bh *BlockHeader) error {
-	return readElements(r, &bh.Version, &bh.PrevBlock, &bh.MerkleRoot,
+	err := readElements(r, &bh.Version, &bh.PrevBlock, &bh.MerkleRoot,
 		(*uint32Time)(&bh.Timestamp), &bh.Bits, &bh.Nonce)
+	if err != nil {
+		return err
+	}
+	if bh.Version > 3 {
+		if err := readElement(r, &bh.AccumulatorCheckpoint); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // writeBlockHeader writes a bitcoin block header to w.  See Serialize for
@@ -123,6 +139,15 @@ func readBlockHeader(r io.Reader, pver uint32, bh *BlockHeader) error {
 // opposed to encoding for the wire.
 func writeBlockHeader(w io.Writer, pver uint32, bh *BlockHeader) error {
 	sec := uint32(bh.Timestamp.Unix())
-	return writeElements(w, bh.Version, &bh.PrevBlock, &bh.MerkleRoot,
+	err := writeElements(w, bh.Version, &bh.PrevBlock, &bh.MerkleRoot,
 		sec, bh.Bits, bh.Nonce)
+	if err != nil {
+		return err
+	}
+	if bh.Version > 3 {
+		if err := writeElement(w, &bh.AccumulatorCheckpoint); err != nil {
+			return err
+		}
+	}
+	return nil
 }

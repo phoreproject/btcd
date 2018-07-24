@@ -13,9 +13,9 @@ import (
 	"regexp"
 	"strings"
 
+	flags "github.com/jessevdk/go-flags"
 	"github.com/phoreproject/btcd/btcjson"
 	"github.com/phoreproject/btcutil"
-	flags "github.com/jessevdk/go-flags"
 )
 
 const (
@@ -130,9 +130,9 @@ func normalizeAddress(addr string, useTestNet3, useSimNet, useWallet bool) strin
 			}
 		default:
 			if useWallet {
-				defaultPort = "8332"
+				defaultPort = "11772"
 			} else {
-				defaultPort = "8334"
+				defaultPort = "11772"
 			}
 		}
 
