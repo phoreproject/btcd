@@ -189,9 +189,9 @@ func isBIP0030Node(node *blockNode) bool {
 // approximately every 4 years.
 func CalcBlockSubsidy(height int32, chainParams *chaincfg.Params) int64 {
 
-	if height == 0 {
+	if height == 1 {
 		return 17500000 * btcutil.SatoshiPerBitcoin
-	} else if height > 0 && height <= 200 {
+	} else if height > 1 && height <= 200 {
 		return 2500 * btcutil.SatoshiPerBitcoin
 	} else if height > 200 && height <= 775600 {
 		return 7 * btcutil.SatoshiPerBitcoin
@@ -325,18 +325,8 @@ func checkProofOfWork(header *wire.BlockHeader, powLimit *big.Int, flags Behavio
 		return ruleError(ErrUnexpectedDifficulty, str)
 	}
 
-	// The block hash must be less than the claimed target unless the flag
-	// to avoid proof of work checks is set.
-	if flags&BFNoPoWCheck != BFNoPoWCheck {
-		// The block hash must be less than the claimed target.
-		hash := header.BlockHash()
-		hashNum := HashToBig(&hash)
-		if hashNum.Cmp(target) > 0 {
-			str := fmt.Sprintf("block hash of %064x is higher than "+
-				"expected max of %064x", hashNum, target)
-			return ruleError(ErrHighHash, str)
-		}
-	}
+	// Phore PoW does not check if the hash is below a target
+	// because it only lasted for 200 blocks anyways.
 
 	return nil
 }
@@ -623,23 +613,6 @@ func ExtractCoinbaseHeight(coinbaseTx *btcutil.Tx) (int32, error) {
 	return int32(serializedHeight), nil
 }
 
-// checkSerializedHeight checks if the signature script in the passed
-// transaction starts with the serialized block height of wantHeight.
-func checkSerializedHeight(coinbaseTx *btcutil.Tx, wantHeight int32) error {
-	serializedHeight, err := ExtractCoinbaseHeight(coinbaseTx)
-	if err != nil {
-		return err
-	}
-
-	if serializedHeight != wantHeight {
-		str := fmt.Sprintf("the coinbase signature script serialized "+
-			"block height is %d when %d was expected",
-			serializedHeight, wantHeight)
-		return ruleError(ErrBadCoinbaseHeight, str)
-	}
-	return nil
-}
-
 // checkBlockHeaderContext performs several validation checks on the block header
 // which depend on its position within the block chain.
 //
@@ -707,10 +680,7 @@ func (b *BlockChain) checkBlockHeaderContext(header *wire.BlockHeader, prevNode 
 	// has upgraded.  These were originally voted on by BIP0034,
 	// BIP0065, and BIP0066.
 	params := b.chainParams
-	if header.Version < 2 && blockHeight >= params.BIP0034Height ||
-		header.Version < 3 && blockHeight >= params.BIP0066Height ||
-		header.Version < 4 && blockHeight >= params.BIP0065Height {
-
+	if header.Version < 4 && blockHeight >= params.ZerocoinStartHeight {
 		str := "new blocks with version %d are no longer valid"
 		str = fmt.Sprintf(str, header.Version)
 		return ruleError(ErrBlockVersionTooOld, str)
@@ -765,20 +735,6 @@ func (b *BlockChain) checkBlockContext(block *btcutil.Block, prevNode *blockNode
 				str := fmt.Sprintf("block contains unfinalized "+
 					"transaction %v", tx.Hash())
 				return ruleError(ErrUnfinalizedTx, str)
-			}
-		}
-
-		// Ensure coinbase starts with serialized block heights for
-		// blocks whose version is the serializedHeightVersion or newer
-		// once a majority of the network has upgraded.  This is part of
-		// BIP0034.
-		if ShouldHaveSerializedBlockHeight(header) &&
-			blockHeight >= b.chainParams.BIP0034Height {
-
-			coinbaseTx := block.Transactions()[0]
-			err := checkSerializedHeight(coinbaseTx, blockHeight)
-			if err != nil {
-				return err
 			}
 		}
 

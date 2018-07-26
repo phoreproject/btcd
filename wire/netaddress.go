@@ -85,12 +85,14 @@ func readNetAddress(r io.Reader, pver uint32, na *NetAddress, ts bool) error {
 	// NOTE: The bitcoin protocol uses a uint32 for the timestamp so it will
 	// stop working somewhere around 2106.  Also timestamp wasn't added until
 	// protocol version >= NetAddressTimeVersion
-	err := readElement(r, (*uint32Time)(&na.Timestamp))
-	if err != nil {
-		return err
+	if ts {
+		err := readElement(r, (*uint32Time)(&na.Timestamp))
+		if err != nil {
+			return err
+		}
 	}
 
-	err = readElements(r, &na.Services, &ip)
+	err := readElements(r, &na.Services, &ip)
 	if err != nil {
 		return err
 	}
@@ -116,9 +118,11 @@ func writeNetAddress(w io.Writer, pver uint32, na *NetAddress, ts bool) error {
 	// NOTE: The bitcoin protocol uses a uint32 for the timestamp so it will
 	// stop working somewhere around 2106.  Also timestamp wasn't added until
 	// until protocol version >= NetAddressTimeVersion.
-	err := writeElement(w, uint32(na.Timestamp.Unix()))
-	if err != nil {
-		return err
+	if ts {
+		err := writeElement(w, uint32(na.Timestamp.Unix()))
+		if err != nil {
+			return err
+		}
 	}
 
 	// Ensure to always write 16 bytes even if the ip is nil.
@@ -126,7 +130,7 @@ func writeNetAddress(w io.Writer, pver uint32, na *NetAddress, ts bool) error {
 	if na.IP != nil {
 		copy(ip[:], na.IP.To16())
 	}
-	err = writeElements(w, na.Services, ip)
+	err := writeElements(w, na.Services, ip)
 	if err != nil {
 		return err
 	}

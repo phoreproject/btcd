@@ -146,7 +146,7 @@ func (c deploymentChecker) Condition(node *blockNode) (bool, error) {
 //
 // This function MUST be called with the chain state lock held (for writes).
 func (b *BlockChain) calcNextBlockVersion(prevNode *blockNode) int32 {
-	if uint32(prevNode.height) >= b.chainParams.ZerocoinStartHeight {
+	if prevNode.height >= b.chainParams.ZerocoinStartHeight {
 		return 4
 	}
 	return 3
