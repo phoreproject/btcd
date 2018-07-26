@@ -20,6 +20,9 @@ var (
 	// the overhead of creating it multiple times.
 	oneLsh256 = new(big.Int).Lsh(bigOne, 256)
 
+	// oneLsh256Minus1 should be 0x2100ffff in compact form
+	oneLsh256Minus1 = new(big.Int).Sub(oneLsh256, bigOne)
+
 	// posLimit is 2 ^ 232
 	posLimit = new(big.Int).Lsh(bigOne, 232)
 )
@@ -261,20 +264,20 @@ func (b *BlockChain) calcNextRequiredDifficulty(lastNode *blockNode, newBlockTim
 		nextNode := lastNode
 		depth := int64(0)
 
-		pastBlockAverage := CompactToBig(lastNode.bits)
-		pastBlockAveragePrev := new(big.Int)
+		difficultyAverage := CompactToBig(lastNode.bits)
+
 		lastBlocktime := int64(0)
 		actualTimespan := int64(0)
 
-		for {
-			if depth > 24 {
-				break
-			}
-			if nextNode == nil {
-				break
-			}
-			if depth > 0 {
-				pastBlockAverage = new(big.Int).Div(new(big.Int).Add(new(big.Int).Mul(pastBlockAveragePrev, big.NewInt(int64(depth))), CompactToBig(nextNode.bits)), big.NewInt(depth + 1))
+		for i := 0; nextNode != nil && nextNode.height > 0 && i <= 24; i++ {
+			depth += 1
+			if depth <= 24 && depth > 1 {
+				// mod by C++ max uint256 to match Phore Core
+				difficultyAverage.Mul(difficultyAverage, big.NewInt(depth))
+				difficultyAverage.Mod(difficultyAverage, oneLsh256Minus1)
+				difficultyAverage.Add(difficultyAverage, CompactToBig(nextNode.bits))
+				difficultyAverage.Mod(difficultyAverage, oneLsh256Minus1)
+				difficultyAverage.Div(difficultyAverage, big.NewInt(depth+1))
 			}
 
 			if lastBlocktime > 0 {
@@ -282,12 +285,11 @@ func (b *BlockChain) calcNextRequiredDifficulty(lastNode *blockNode, newBlockTim
 			}
 			lastBlocktime = nextNode.timestamp
 
-			depth += 1
-			nextNode = lastNode.parent
-			pastBlockAveragePrev.Set(pastBlockAverage)
+			nextNode = nextNode.parent
 		}
 
-		targetTimespan := int64((b.chainParams.TargetTimespan * 24).Seconds())
+		targetTimespan := int64(b.chainParams.TargetTimePerBlock.Seconds()) * 24
+
 		if actualTimespan < targetTimespan / 3 {
 			actualTimespan = targetTimespan / 3
 		}
@@ -295,8 +297,9 @@ func (b *BlockChain) calcNextRequiredDifficulty(lastNode *blockNode, newBlockTim
 			actualTimespan = targetTimespan * 3
 		}
 
-		newTarget.Set(pastBlockAverage)
+		newTarget.Set(difficultyAverage)
 		newTarget.Mul(newTarget, big.NewInt(actualTimespan))
+		newTarget.Mod(newTarget, oneLsh256Minus1)
 		newTarget.Div(newTarget, big.NewInt(targetTimespan))
 
 		// Limit new value to the proof of work limit.
@@ -310,9 +313,6 @@ func (b *BlockChain) calcNextRequiredDifficulty(lastNode *blockNode, newBlockTim
 	// newTarget since conversion to the compact representation loses
 	// precision.
 	newTargetBits := BigToCompact(newTarget)
-	log.Debugf("Difficulty retarget at block height %d", lastNode.height+1)
-	log.Debugf("Old target %08x (%064x)", lastNode.bits, oldTarget)
-	log.Debugf("New target %08x (%064x)", newTargetBits, CompactToBig(newTargetBits))
 
 	return newTargetBits, nil
 }
