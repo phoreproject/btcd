@@ -238,7 +238,6 @@ func (b *BlockChain) calcNextRequiredDifficulty(lastNode *blockNode, newBlockTim
 	}
 
 	newTarget := new(big.Int)
-	oldTarget := CompactToBig(lastNode.bits)
 
 	if uint32(lastNode.height) > b.chainParams.LastPoWBlock {
 		targetLimit := posLimit
@@ -252,10 +251,10 @@ func (b *BlockChain) calcNextRequiredDifficulty(lastNode *blockNode, newBlockTim
 		oldTarget := CompactToBig(lastNode.bits)
 
 		interval := int64((b.chainParams.TargetTimePerBlock / b.chainParams.PoSTargetTimespan).Seconds())
-		targetMultiplier := big.NewInt((interval-1)*int64(b.chainParams.TargetTimePerBlock.Seconds())+actualTimespan+actualTimespan)
+		targetMultiplier := big.NewInt((interval-1)*int64(b.chainParams.TargetTimePerBlock.Seconds()) + actualTimespan + actualTimespan)
 		newTarget = new(big.Int).Mul(oldTarget, targetMultiplier)
 		targetTimeSpan := int64(b.chainParams.TargetTimespan / time.Second)
-		newTarget.Div(newTarget, big.NewInt(targetTimeSpan * (interval + 1)))
+		newTarget.Div(newTarget, big.NewInt(targetTimeSpan*(interval+1)))
 
 		if newTarget.Cmp(big.NewInt(0)) <= 0 || newTarget.Cmp(targetLimit) > 0 {
 			newTarget = targetLimit
@@ -270,7 +269,7 @@ func (b *BlockChain) calcNextRequiredDifficulty(lastNode *blockNode, newBlockTim
 		actualTimespan := int64(0)
 
 		for i := 0; nextNode != nil && nextNode.height > 0 && i <= 24; i++ {
-			depth += 1
+			depth++
 			if depth <= 24 && depth > 1 {
 				// mod by C++ max uint256 to match Phore Core
 				difficultyAverage.Mul(difficultyAverage, big.NewInt(depth))
@@ -280,7 +279,7 @@ func (b *BlockChain) calcNextRequiredDifficulty(lastNode *blockNode, newBlockTim
 				difficultyAverage.Div(difficultyAverage, big.NewInt(depth+1))
 			}
 
-			if lastBlocktime > 0 {
+			if lastBlocktime > 0 && i < 24 {
 				actualTimespan += lastBlocktime - nextNode.timestamp
 			}
 			lastBlocktime = nextNode.timestamp
@@ -290,10 +289,10 @@ func (b *BlockChain) calcNextRequiredDifficulty(lastNode *blockNode, newBlockTim
 
 		targetTimespan := int64(b.chainParams.TargetTimePerBlock.Seconds()) * 24
 
-		if actualTimespan < targetTimespan / 3 {
+		if actualTimespan < targetTimespan/3 {
 			actualTimespan = targetTimespan / 3
 		}
-		if actualTimespan > targetTimespan * 3 {
+		if actualTimespan > targetTimespan*3 {
 			actualTimespan = targetTimespan * 3
 		}
 
