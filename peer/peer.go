@@ -1364,7 +1364,7 @@ out:
 		p.stallControl <- stallControlMsg{sccHandlerStart, rmsg}
 		switch msg := rmsg.(type) {
 		case *wire.MsgVersion:
-
+			// Limit to one version message per peer.
 			p.PushRejectMsg(msg.Command(), wire.RejectDuplicate,
 				"duplicate version message", nil, true)
 			break out
