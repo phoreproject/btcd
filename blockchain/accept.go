@@ -71,6 +71,13 @@ func (b *BlockChain) maybeAcceptBlock(block *btcutil.Block, flags BehaviorFlags)
 		newNode.workSum.Add(prevNode.workSum, newNode.workSum)
 	}
 	b.index.AddNode(newNode)
+	b.index.SetStakeEntropyBit(newNode, newNode.GetStakeEntropyBit())
+
+	sm, generatedStakeModifier, err := b.computeNextStakeModifier(newNode.parent)
+	if err != nil {
+		return false, err
+	}
+	b.index.SetStakeModifier(newNode, sm, generatedStakeModifier)
 
 	// Connect the passed block to the chain while respecting proper chain
 	// selection according to the chain with the most proof of work.  This

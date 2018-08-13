@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"math"
 	"strconv"
 
 	"github.com/phoreproject/btcd/chaincfg/chainhash"
@@ -108,6 +109,22 @@ const (
 	// than 10k bytes.
 	maxWitnessItemSize = 11000
 )
+
+var (
+	// zeroHash is the zero value for a chainhash.Hash and is defined as
+	// a package level variable to avoid the need to create a new instance
+	// every time a check is needed.
+	zeroHash = &chainhash.Hash{}
+)
+
+// IsNullOutpoint determines whether or not a previous transaction output point
+// is set.
+func IsNullOutpoint(outpoint *OutPoint) bool {
+	if outpoint.Index == math.MaxUint32 && outpoint.Hash.IsEqual(zeroHash) {
+		return true
+	}
+	return false
+}
 
 // witnessMarkerBytes are a pair of bytes specific to the witness encoding. If
 // this sequence is encoutered, then it indicates a transaction has iwtness
@@ -269,6 +286,12 @@ func (t *TxOut) SerializeSize() int {
 	// Value 8 bytes + serialized varint size for the length of PkScript +
 	// PkScript bytes.
 	return 8 + VarIntSerializeSize(uint64(len(t.PkScript))) + len(t.PkScript)
+}
+
+// IsEmpty checks if the tx outpoint is considered
+// empty.
+func (t *TxOut) IsEmpty() bool {
+	return t.Value == 0 && len(t.PkScript) == 0
 }
 
 // NewTxOut returns a new bitcoin transaction output with the provided
@@ -887,7 +910,7 @@ func (msg *MsgTx) PkScriptLocs() []int {
 // IsCoinStake returns true if the transaction passes simple tests for a coin
 // stake transaction.
 func (msg *MsgTx) IsCoinStake() bool {
-	return len(msg.TxIn) > 0 && msg.TxIn[0] != nil && len(msg.TxOut) >= 2 && msg.TxOut[0] == nil
+	return len(msg.TxIn) > 0 && !IsNullOutpoint(&msg.TxIn[0].PreviousOutPoint) && len(msg.TxOut) >= 2 && msg.TxOut[0].IsEmpty()
 }
 
 // NewMsgTx returns a new bitcoin tx message that conforms to the Message

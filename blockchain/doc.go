@@ -35,7 +35,7 @@ is by no means exhaustive:
 
  - Reject duplicate blocks
  - Perform a series of sanity checks on the block and its transactions such as
-   verifying proof of work, timestamps, number and character of transactions,
+   verifying proof of stake, timestamps, number and character of transactions,
    transaction amounts, script complexity, and merkle root calculations
  - Compare the block against predetermined checkpoints for expected timestamps
    and difficulty based on elapsed time since the checkpoint

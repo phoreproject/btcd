@@ -155,6 +155,14 @@ type Params struct {
 	// on the network.
 	PoSTargetTimespan time.Duration
 
+	// StakeMinimumAge is the amount of time that has to pass before a staked
+	// coin can be staked again.
+	StakeMinimumAge time.Duration
+
+	// ModifierV2StartBlock is the block at which version 2 of the staking
+	// selection algorithm was implemented.
+	ModifierV2StartBlock int32
+
 	// TargetTimePerBlock is the desired amount of time to generate each
 	// block.
 	TargetTimePerBlock time.Duration
@@ -233,7 +241,9 @@ var MainNetParams = Params{
 	GenerateSupported:        true,
 	MasternodeDriftCount:     20,
 	LastPoWBlock:             200,
-	ZerocoinStartHeight: 89993,
+	ZerocoinStartHeight:      89993,
+	StakeMinimumAge:          time.Hour * 3,
+	ModifierV2StartBlock:     433160,
 
 	// Checkpoints ordered from oldest to newest.
 	Checkpoints: []Checkpoint{},

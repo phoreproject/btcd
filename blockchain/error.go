@@ -166,6 +166,22 @@ const (
 	// coinbase transaction.
 	ErrMultipleCoinbases
 
+	// ErrCoinbaseNotEmptyPoS indicates a block has a non-empty coinbase
+	// for a proof-of-stake block
+	ErrCoinbaseNotEmptyPoS
+
+	// ErrSecondTxNotCoinstake indicates the second transaction in a PoS
+	// block is not a coinstake transaction.
+	ErrSecondTxNotCoinstake
+
+	// ErrMultipleCoinstakes indicates there is more than one coinstake in
+	// a PoS block.
+	ErrMultipleCoinstakes
+
+	// ErrBadCoinstakeKernel indicates that the proof-of-stake kernel did
+	// not meet the target
+	ErrBadCoinstakeKernel
+
 	// ErrBadCoinbaseScriptLen indicates the length of the signature script
 	// for a coinbase transaction is not within the valid range.
 	ErrBadCoinbaseScriptLen

@@ -24,6 +24,11 @@ const (
 	// hours.
 	MaxTimeOffsetSeconds = 2 * 60 * 60
 
+	// MaxTimeOffsetSecondsPOS is the maximum number of seconds a block time
+	// is allowed to be ahead of the current time for proof-of-stake.  This
+	// is currently 3 minutes
+	MaxTimeOffsetSecondsPOS = 3 * 60
+
 	// MinCoinbaseScriptLen is the minimum length a coinbase script can be.
 	MinCoinbaseScriptLen = 2
 
@@ -33,10 +38,6 @@ const (
 	// medianTimeBlocks is the number of previous blocks which should be
 	// used to calculate the median time used to validate block timestamps.
 	medianTimeBlocks = 11
-
-	// serializedHeightVersion is the block version which changed block
-	// coinbases to start with the serialized block height.
-	serializedHeightVersion = 2
 )
 
 var (
@@ -44,35 +45,7 @@ var (
 	// a package level variable to avoid the need to create a new instance
 	// every time a check is needed.
 	zeroHash = &chainhash.Hash{}
-
-	// block91842Hash is one of the two nodes which violate the rules
-	// set forth in BIP0030.  It is defined as a package level variable to
-	// avoid the need to create a new instance every time a check is needed.
-	block91842Hash = newHashFromStr("00000000000a4d0a398161ffc163c503763b1f4360639393e0e4c8e300e0caec")
-
-	// block91880Hash is one of the two nodes which violate the rules
-	// set forth in BIP0030.  It is defined as a package level variable to
-	// avoid the need to create a new instance every time a check is needed.
-	block91880Hash = newHashFromStr("00000000000743f190a18c5577a3c2d2a1f610ae9601ac046a38084ccb7cd721")
 )
-
-// isNullOutpoint determines whether or not a previous transaction output point
-// is set.
-func isNullOutpoint(outpoint *wire.OutPoint) bool {
-	if outpoint.Index == math.MaxUint32 && outpoint.Hash.IsEqual(zeroHash) {
-		return true
-	}
-	return false
-}
-
-// ShouldHaveSerializedBlockHeight determines if a block should have a
-// serialized block height embedded within the scriptSig of its
-// coinbase transaction. Judgement is based on the block version in the block
-// header. Blocks with version 2 and above satisfy this criteria. See BIP0034
-// for further information.
-func ShouldHaveSerializedBlockHeight(header *wire.BlockHeader) bool {
-	return header.Version >= serializedHeightVersion
-}
 
 // IsCoinBaseTx determines whether or not a transaction is a coinbase.  A coinbase
 // is a special transaction created by miners that has no inputs.  This is
@@ -160,21 +133,6 @@ func IsFinalizedTransaction(tx *btcutil.Tx, blockHeight int32, blockTime time.Ti
 		}
 	}
 	return true
-}
-
-// isBIP0030Node returns whether or not the passed node represents one of the
-// two blocks that violate the BIP0030 rule which prevents transactions from
-// overwriting old ones.
-func isBIP0030Node(node *blockNode) bool {
-	if node.height == 91842 && node.hash.IsEqual(block91842Hash) {
-		return true
-	}
-
-	if node.height == 91880 && node.hash.IsEqual(block91880Hash) {
-		return true
-	}
-
-	return false
 }
 
 // CalcBlockSubsidy returns the subsidy amount a block at the provided height
@@ -291,7 +249,7 @@ func CheckTransactionSanity(tx *btcutil.Tx) error {
 		// transaction must not be null.
 		for _, txIn := range msgTx.TxIn {
 			prevOut := &txIn.PreviousOutPoint
-			if isNullOutpoint(prevOut) {
+			if wire.IsNullOutpoint(prevOut) {
 				return ruleError(ErrBadTxInput, "transaction "+
 					"input refers to previous output that "+
 					"is null")
@@ -424,7 +382,7 @@ func CountP2SHSigOps(tx *btcutil.Tx, isCoinBaseTx bool, utxoView *UtxoViewpoint)
 //
 // The flags do not modify the behavior of this function directly, however they
 // are needed to pass along to checkProofOfWork.
-func checkBlockHeaderSanity(header *wire.BlockHeader, powLimit *big.Int, timeSource MedianTimeSource, flags BehaviorFlags) error {
+func checkBlockHeaderSanity(header *wire.BlockHeader, powLimit *big.Int, timeSource MedianTimeSource, flags BehaviorFlags, proofOfStake bool) error {
 	// Ensure the proof of work bits in the block header is in min/max range
 	// and the block hash is less than the target value described by the
 	// bits.
@@ -445,8 +403,14 @@ func checkBlockHeaderSanity(header *wire.BlockHeader, powLimit *big.Int, timeSou
 	}
 
 	// Ensure the block time is not too far in the future.
-	maxTimestamp := timeSource.AdjustedTime().Add(time.Second *
-		MaxTimeOffsetSeconds)
+	var maxTimestamp time.Time
+	if proofOfStake {
+		maxTimestamp = timeSource.AdjustedTime().Add(time.Second *
+			MaxTimeOffsetSecondsPOS)
+	} else {
+		maxTimestamp = timeSource.AdjustedTime().Add(time.Second *
+			MaxTimeOffsetSeconds)
+	}
 	if header.Timestamp.After(maxTimestamp) {
 		str := fmt.Sprintf("block timestamp of %v is too far in the "+
 			"future", header.Timestamp)
@@ -464,7 +428,8 @@ func checkBlockHeaderSanity(header *wire.BlockHeader, powLimit *big.Int, timeSou
 func checkBlockSanity(block *btcutil.Block, powLimit *big.Int, timeSource MedianTimeSource, flags BehaviorFlags) error {
 	msgBlock := block.MsgBlock()
 	header := &msgBlock.Header
-	err := checkBlockHeaderSanity(header, powLimit, timeSource, flags)
+	proofOfStake := block.IsProofOfStake()
+	err := checkBlockHeaderSanity(header, powLimit, timeSource, flags, proofOfStake)
 	if err != nil {
 		return err
 	}
@@ -506,6 +471,26 @@ func checkBlockSanity(block *btcutil.Block, powLimit *big.Int, timeSource Median
 			str := fmt.Sprintf("block contains second coinbase at "+
 				"index %d", i+1)
 			return ruleError(ErrMultipleCoinbases, str)
+		}
+	}
+
+	if proofOfStake {
+		if len(transactions[0].MsgTx().TxOut) != 1 || !transactions[0].MsgTx().TxOut[0].IsEmpty() {
+			str := fmt.Sprintf("coinbase not empty for proof-of-stake block")
+			return ruleError(ErrCoinbaseNotEmptyPoS, str)
+		}
+
+		if len(transactions) < 2 || !transactions[1].MsgTx().IsCoinStake() {
+			str := fmt.Sprintf("second transaction must be coinstake")
+			return ruleError(ErrSecondTxNotCoinstake, str)
+		}
+
+		for i, tx := range transactions[2:] {
+			if tx.MsgTx().IsCoinStake() {
+				str := fmt.Sprintf("block contains second coinstake at "+
+					"index %d", i+1)
+				return ruleError(ErrMultipleCoinstakes, str)
+			}
 		}
 	}
 
@@ -570,47 +555,6 @@ func checkBlockSanity(block *btcutil.Block, powLimit *big.Int, timeSource Median
 // sane before continuing with block processing.  These checks are context free.
 func CheckBlockSanity(block *btcutil.Block, powLimit *big.Int, timeSource MedianTimeSource) error {
 	return checkBlockSanity(block, powLimit, timeSource, BFNone)
-}
-
-// ExtractCoinbaseHeight attempts to extract the height of the block from the
-// scriptSig of a coinbase transaction.  Coinbase heights are only present in
-// blocks of version 2 or later.  This was added as part of BIP0034.
-func ExtractCoinbaseHeight(coinbaseTx *btcutil.Tx) (int32, error) {
-	sigScript := coinbaseTx.MsgTx().TxIn[0].SignatureScript
-	if len(sigScript) < 1 {
-		str := "the coinbase signature script for blocks of " +
-			"version %d or greater must start with the " +
-			"length of the serialized block height"
-		str = fmt.Sprintf(str, serializedHeightVersion)
-		return 0, ruleError(ErrMissingCoinbaseHeight, str)
-	}
-
-	// Detect the case when the block height is a small integer encoded with
-	// as single byte.
-	opcode := int(sigScript[0])
-	if opcode == txscript.OP_0 {
-		return 0, nil
-	}
-	if opcode >= txscript.OP_1 && opcode <= txscript.OP_16 {
-		return int32(opcode - (txscript.OP_1 - 1)), nil
-	}
-
-	// Otherwise, the opcode is the length of the following bytes which
-	// encode in the block height.
-	serializedLen := int(sigScript[0])
-	if len(sigScript[1:]) < serializedLen {
-		str := "the coinbase signature script for blocks of " +
-			"version %d or greater must start with the " +
-			"serialized block height"
-		str = fmt.Sprintf(str, serializedLen)
-		return 0, ruleError(ErrMissingCoinbaseHeight, str)
-	}
-
-	serializedHeightBytes := make([]byte, 8)
-	copy(serializedHeightBytes, sigScript[1:serializedLen+1])
-	serializedHeight := binary.LittleEndian.Uint64(serializedHeightBytes)
-
-	return int32(serializedHeight), nil
 }
 
 // checkBlockHeaderContext performs several validation checks on the block header
@@ -822,7 +766,7 @@ func (b *BlockChain) checkBIP0030(node *blockNode, block *btcutil.Block, view *U
 //
 // NOTE: The transaction MUST have already been sanity checked with the
 // CheckTransactionSanity function prior to calling this function.
-func CheckTransactionInputs(tx *btcutil.Tx, txHeight int32, utxoView *UtxoViewpoint, chainParams *chaincfg.Params) (int64, error) {
+func CheckTransactionInputs(tx *btcutil.Tx, txHeight int32, utxoView *UtxoViewpoint, chainParams *chaincfg.Params, isCoinStake bool) (int64, error) {
 	// Coinbase transactions have no inputs.
 	if IsCoinBase(tx) {
 		return 0, nil
@@ -904,7 +848,7 @@ func CheckTransactionInputs(tx *btcutil.Tx, txHeight int32, utxoView *UtxoViewpo
 	}
 
 	// Ensure the transaction does not spend more than its inputs.
-	if totalSatoshiIn < totalSatoshiOut {
+	if totalSatoshiIn < totalSatoshiOut && !isCoinStake {
 		str := fmt.Sprintf("total value of all transaction inputs for "+
 			"transaction %v is %v which is less than the amount "+
 			"spent of %v", txHash, totalSatoshiIn, totalSatoshiOut)
@@ -917,6 +861,73 @@ func CheckTransactionInputs(tx *btcutil.Tx, txHeight int32, utxoView *UtxoViewpo
 	txFeeInSatoshi := totalSatoshiIn - totalSatoshiOut
 	return txFeeInSatoshi, nil
 }
+
+const stakeModifierSelectionInterval time.Duration = 2087 * time.Second
+
+// getStakeModifier returns the stakeModifier, the stake modifier height, and
+// the stake modifier time for a given block hash
+func (b *BlockChain) getStakeModifier(h *chainhash.Hash) (uint64, int32, int64) {
+	blockFrom, _ := b.BlockByHash(h) // we know this block was created at least 3 hours ago
+	timeFrom := blockFrom.MsgBlock().Header.Timestamp
+	modifierHeight := blockFrom.Height()
+	modifierTime := timeFrom
+	var modifier uint64
+	block := blockFrom
+	next, err := b.BlockByHeight(blockFrom.Height() + 1)
+	if err != nil {
+		panic("Nil block found in stake modifier selection")
+	}
+	for modifierTime.Before(timeFrom.Add(stakeModifierSelectionInterval)) {
+		if next == nil {
+			// should never happen
+			panic("Nil block found in stake modifier selection")
+		}
+
+		block = next
+		blockIndexEntry := b.index.LookupNode(block.Hash())
+		if b.index.GeneratedStakeModifier(blockIndexEntry) {
+			modifierTime = block.MsgBlock().Header.Timestamp
+			modifierHeight = block.Height()
+			modifier = blockIndexEntry.stakeModifier
+		}
+		next, _ = b.BlockByHeight(next.Height() + 1)
+	}
+
+	return modifier, modifierHeight, modifierTime.Unix()
+}
+
+func getStakeHash(stakeModifier uint64, time uint, prevout wire.OutPoint, timeBlockFrom uint) chainhash.Hash {
+	timeBytes := make([]byte, 4)
+	outNBytes := make([]byte, 4)
+	timeFromBytes := make([]byte, 4)
+	stakeModifierBytes := make([]byte, 8)
+	binary.LittleEndian.PutUint32(timeBytes, uint32(time))
+	binary.LittleEndian.PutUint32(outNBytes, prevout.Index)
+	binary.LittleEndian.PutUint32(timeFromBytes, uint32(timeBlockFrom))
+	binary.LittleEndian.PutUint64(stakeModifierBytes, uint64(stakeModifier))
+	hashInput := append(stakeModifierBytes,
+		append(timeFromBytes,
+			append(outNBytes,
+				append(prevout.Hash[:],
+					timeBytes...,
+				)...,
+			)...,
+		)...,
+	)
+	return chainhash.HashH(hashInput)
+}
+
+func stakeTargetHit(hashProofOfStake *big.Int, valueIn int64, targetPerCoinDay *big.Int) bool {
+	coinDayWeight := big.NewInt(valueIn)
+	coinDayWeight.Div(coinDayWeight, big.NewInt(100))
+
+	target := coinDayWeight.Mul(coinDayWeight, targetPerCoinDay)
+	target.Mod(target, oneLsh256Minus1)
+
+	return hashProofOfStake.Cmp(target) < 0
+}
+
+const stakeHashDrift = 45
 
 // checkConnectBlock performs several checks to confirm connecting the passed
 // block to the chain represented by the passed view does not violate any rules.
@@ -961,29 +972,6 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *btcutil.Block, vi
 			"of expected %v", view.BestHash(), parentHash))
 	}
 
-	// BIP0030 added a rule to prevent blocks which contain duplicate
-	// transactions that 'overwrite' older transactions which are not fully
-	// spent.  See the documentation for checkBIP0030 for more details.
-	//
-	// There are two blocks in the chain which violate this rule, so the
-	// check must be skipped for those blocks.  The isBIP0030Node function
-	// is used to determine if this block is one of the two blocks that must
-	// be skipped.
-	//
-	// In addition, as of BIP0034, duplicate coinbases are no longer
-	// possible due to its requirement for including the block height in the
-	// coinbase and thus it is no longer possible to create transactions
-	// that 'overwrite' older ones.  Therefore, only enforce the rule if
-	// BIP0034 is not yet active.  This is a useful optimization because the
-	// BIP0030 check is expensive since it involves a ton of cache misses in
-	// the utxoset.
-	if !isBIP0030Node(node) && (node.height < b.chainParams.BIP0034Height) {
-		err := b.checkBIP0030(node, block, view)
-		if err != nil {
-			return err
-		}
-	}
-
 	// Load all of the utxos referenced by the inputs for all transactions
 	// in the block don't already exist in the utxo view from the database.
 	//
@@ -992,6 +980,69 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *btcutil.Block, vi
 	err := view.fetchInputUtxos(b.db, block)
 	if err != nil {
 		return err
+	}
+
+	// Check the proof-of-stake component of the block to ensure that the
+	// prevout of the transaction exists and that the block is signed with
+	// the correct key.
+	if node.height > int32(b.chainParams.LastPoWBlock) {
+		txn, err := block.Tx(1)
+		if err != nil {
+			return err
+		}
+
+		log.Debugf("reject test 2")
+
+		_, err = CheckTransactionInputs(txn, node.height, view, b.chainParams, true)
+		if err != nil {
+			return err
+		}
+
+		err = view.connectTransaction(txn, node.height, stxos)
+		if err != nil {
+			return err
+		}
+
+		prevTxHash := txn.MsgTx().TxIn[0].PreviousOutPoint.Hash
+		prevTx := view.LookupEntry(&prevTxHash)
+
+		value := prevTx.AmountByIndex(txn.MsgTx().TxIn[0].PreviousOutPoint.Index)
+
+		prevTxBlock, err := b.BlockByHeight(prevTx.blockHeight)
+		if err != nil {
+			return err
+		}
+
+		prevBlockTime := prevTxBlock.MsgBlock().Header.Timestamp
+		stakingTime := block.MsgBlock().Header.Timestamp
+		if prevBlockTime.Add(b.chainParams.StakeMinimumAge).After(stakingTime) {
+			return AssertError("block stake does not meet the minimum age requirement")
+		}
+
+		target := CompactToBig(block.MsgBlock().Header.Bits)
+		stakeModifier, _, _ := b.getStakeModifier(prevTxBlock.Hash())
+
+		found := false
+
+		for i := int64(0); i < stakeHashDrift; i++ {
+			tryTime := prevBlockTime.Unix() + stakeHashDrift - i
+
+			// TODO: 32-bit time
+			hashProofOfStake := getStakeHash(stakeModifier, uint(stakingTime.Unix()), txn.MsgTx().TxIn[0].PreviousOutPoint, uint(tryTime))
+
+			hashProofOfStakeBig := big.NewInt(0).SetBytes(hashProofOfStake[:])
+
+			if !stakeTargetHit(hashProofOfStakeBig, int64(value), target) {
+				continue
+			}
+
+			found = true
+		}
+
+		if !found {
+			str := fmt.Sprintf("CheckProofOfStake() : INFO: check kernel failed on coinstake %s", txn.Hash().String())
+			return ruleError(ErrBadCoinstakeKernel, str)
+		}
 	}
 
 	// BIP0016 describes a pay-to-script-hash type that is considered a
@@ -1047,8 +1098,13 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *btcutil.Block, vi
 	// bounds.
 	var totalFees int64
 	for _, tx := range transactions {
+		// don't check coinstake transactions
+		if tx.MsgTx().IsCoinStake() {
+			continue
+		}
+
 		txFee, err := CheckTransactionInputs(tx, node.height, view,
-			b.chainParams)
+			b.chainParams, false)
 		if err != nil {
 			return err
 		}

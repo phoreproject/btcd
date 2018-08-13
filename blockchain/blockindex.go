@@ -5,6 +5,7 @@
 package blockchain
 
 import (
+	"errors"
 	"math/big"
 	"sort"
 	"sync"
@@ -37,6 +38,15 @@ const (
 	//
 	// NOTE: This must be defined last in order to avoid influencing iota.
 	statusNone blockStatus = 0
+)
+
+const (
+	// BlockProofOfStakeFlag indicates if a block is proof-of-stake
+	BlockProofOfStakeFlag uint = 1 << iota
+	// BlockStakeEntropyFlag indicates the block's entropy bit
+	BlockStakeEntropyFlag
+	// BlockStakeModifierFlag indicates whether a stake modifier was generated on this block
+	BlockStakeModifierFlag
 )
 
 // HaveData returns whether the full block data is stored in the database. This
@@ -94,11 +104,17 @@ type blockNode struct {
 	timestamp  int64
 	merkleRoot chainhash.Hash
 
+	// stakeModifier is the proof-of-stake modifier for the block
+	stakeModifier uint64
+
 	// status is a bitfield representing the validation state of the block. The
 	// status field, unlike the other fields, may be written to and so should
 	// only be accessed using the concurrent-safe NodeStatus method on
 	// blockIndex once the node has been added to the global index.
 	status blockStatus
+
+	// flags is the proof-of-stake bitfield for the block
+	flags uint
 }
 
 // initBlockNode initializes a block node from the given header and height.  The
@@ -217,6 +233,11 @@ func (node *blockNode) CalcPastMedianTime() time.Time {
 	return time.Unix(medianTimestamp, 0)
 }
 
+// GetStakeEntropyBit returns true if the entropy bit is set
+func (node *blockNode) GetStakeEntropyBit() uint {
+	return uint(node.hash.CloneBytes()[0]) & 1
+}
+
 // blockIndex provides facilities for keeping track of an in-memory index of the
 // block chain.  Although the name block chain suggests a single chain of
 // blocks, it is actually a tree-shaped structure where any node can have
@@ -303,5 +324,57 @@ func (bi *blockIndex) SetStatusFlags(node *blockNode, flags blockStatus) {
 func (bi *blockIndex) UnsetStatusFlags(node *blockNode, flags blockStatus) {
 	bi.Lock()
 	node.status &^= flags
+	bi.Unlock()
+}
+
+// SetStakeEntropyBit sets the entropy bit to true
+func (bi *blockIndex) SetStakeEntropyBit(n *blockNode, entropyBit uint) error {
+	if entropyBit > 1 {
+		return errors.New("entropy bit out of range")
+	}
+	if entropyBit == 1 {
+		bi.Lock()
+		n.flags |= BlockStakeEntropyFlag
+		bi.Unlock()
+	}
+	return nil
+}
+
+// GeneratedStakeModifier checks if the block generated a stake modifier
+func (bi *blockIndex) GeneratedStakeModifier(n *blockNode) bool {
+	bi.RLock()
+	f := n.flags&BlockStakeModifierFlag > 0
+	bi.RUnlock()
+	return f
+}
+
+// SetStakeModifier sets the modifier for a block
+func (bi *blockIndex) SetStakeModifier(n *blockNode, modifier uint64, generatedStakeModifier bool) {
+	bi.Lock()
+	n.stakeModifier = modifier
+	if generatedStakeModifier {
+		n.flags |= BlockStakeModifierFlag
+	}
+	bi.Unlock()
+}
+
+// GetStakeModifier reads the stake modifier for the block
+func (bi *blockIndex) GetStakeModifier(n *blockNode) uint64 {
+	bi.RLock()
+	m := n.stakeModifier
+	bi.RUnlock()
+	return m
+}
+
+func (bi *blockIndex) IsProofOfStake(n *blockNode) bool {
+	bi.RLock()
+	pos := n.flags&BlockProofOfStakeFlag > 0
+	bi.RUnlock()
+	return pos
+}
+
+func (bi *blockIndex) SetProofOfStake(n *blockNode, pos bool) {
+	bi.Lock()
+	n.flags |= BlockProofOfStakeFlag
 	bi.Unlock()
 }
