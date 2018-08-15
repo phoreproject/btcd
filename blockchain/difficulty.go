@@ -24,7 +24,7 @@ var (
 	oneLsh256Minus1 = new(big.Int).Sub(oneLsh256, bigOne)
 
 	// posLimit is 2 ^ 232
-	posLimit = new(big.Int).Lsh(bigOne, 232)
+	posLimit = new(big.Int).Sub(new(big.Int).Lsh(bigOne, 232), bigOne)
 )
 
 // HashToBig converts a chainhash.Hash into a big.Int that can be used to
@@ -230,19 +230,12 @@ func (b *BlockChain) calcNextRequiredDifficulty(lastNode *blockNode, newBlockTim
 		return b.chainParams.PowLimitBits, nil
 	}
 
-	// Get the block node at the previous retarget (targetTimespan days
-	// worth of blocks).
-	firstNode := lastNode.RelativeAncestor(b.blocksPerRetarget - 1)
-	if firstNode == nil {
-		return 0, AssertError("unable to obtain previous retarget block")
-	}
-
 	newTarget := new(big.Int)
 
 	if uint32(lastNode.height) > b.chainParams.LastPoWBlock {
 		targetLimit := posLimit
 
-		actualTimespan := lastNode.timestamp - firstNode.timestamp
+		actualTimespan := lastNode.timestamp - lastNode.parent.timestamp
 
 		if actualTimespan < 0 {
 			actualTimespan = 1
@@ -250,13 +243,16 @@ func (b *BlockChain) calcNextRequiredDifficulty(lastNode *blockNode, newBlockTim
 
 		oldTarget := CompactToBig(lastNode.bits)
 
-		interval := int64((b.chainParams.TargetTimePerBlock / b.chainParams.PoSTargetTimespan).Seconds())
+		interval := int64(b.chainParams.PoSTargetTimespan.Seconds()) / int64(b.chainParams.TargetTimePerBlock.Seconds())
 		targetMultiplier := big.NewInt((interval-1)*int64(b.chainParams.TargetTimePerBlock.Seconds()) + actualTimespan + actualTimespan)
+
 		newTarget = new(big.Int).Mul(oldTarget, targetMultiplier)
+		newTarget.Mod(newTarget, oneLsh256Minus1)
+
 		targetTimeSpan := int64(b.chainParams.TargetTimespan / time.Second)
 		newTarget.Div(newTarget, big.NewInt(targetTimeSpan*(interval+1)))
 
-		if newTarget.Cmp(big.NewInt(0)) <= 0 || newTarget.Cmp(targetLimit) > 0 {
+		if newTarget.Cmp(big.NewInt(0)) <= 0 || newTarget.Cmp(posLimit) > 0 {
 			newTarget = targetLimit
 		}
 	} else {
