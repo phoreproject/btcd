@@ -43,12 +43,19 @@ func (b *BlockChain) selectBlockFromCandidates(nodesSortedByTimestamp []timeAndB
 			}
 		} else {
 			hashProof = node.hash
+			for i, j := 0, len(hashProof)-1; i < j; i, j = i+1, j-1 {
+				hashProof[i], hashProof[j] = hashProof[j], hashProof[i]
+			}
 		}
 
 		smb := make([]byte, 8)
 		binary.LittleEndian.PutUint64(smb, stakeModifier)
 
-		hashSelection := chainhash.HashH(append(hashProof[:], smb...))
+		toHash := append(hashProof[:], smb...)
+
+		log.Debugf("select blocks hash: %x", toHash)
+
+		hashSelection := chainhash.HashH(toHash)
 
 		if b.index.IsProofOfStake(node) {
 			// shift right by 4
@@ -57,7 +64,7 @@ func (b *BlockChain) selectBlockFromCandidates(nodesSortedByTimestamp []timeAndB
 
 		hashSelectionBig := HashToBig(&hashSelection)
 
-		if selected && hashSelectionBig.Cmp(hashBest) < 0 {
+		if selected && hashSelectionBig.Cmp(hashBest) > 0 {
 			hashBest = hashSelectionBig
 			selectedBlock = node
 		} else if !selected {
@@ -75,7 +82,7 @@ type timeAndBlockNode struct {
 	time time.Time
 }
 
-const blockOneStakeModifier = 94113042985680
+const blockOneStakeModifier = 4539363955
 
 // computeNextStakeModifier gets the next block's stake modifier and returns whether one
 // was generated and if so, what the stake modifier is
@@ -94,6 +101,8 @@ func (b *BlockChain) computeNextStakeModifier(node *blockNode) (uint64, bool, er
 
 	stakeModifier := lastStakeModifierBlock.stakeModifier
 
+	log.Debugf("last stake modifier: %d", stakeModifier)
+
 	modifierTime := lastStakeModifierBlock.timestamp
 	if modifierTime/60 >= node.timestamp/60 {
 		return b.index.GetStakeModifier(lastStakeModifierBlock), false, nil
@@ -101,7 +110,7 @@ func (b *BlockChain) computeNextStakeModifier(node *blockNode) (uint64, bool, er
 
 	selectionIntervalStart := (node.timestamp/60)*60 - int64(stakeModifierSelectionInterval.Seconds())
 
-	nodesSortedByTimestamp := []timeAndBlockNode{}
+	var nodesSortedByTimestamp []timeAndBlockNode
 
 	for node != nil && node.timestamp >= selectionIntervalStart {
 		nodesSortedByTimestamp = append([]timeAndBlockNode{
@@ -111,15 +120,17 @@ func (b *BlockChain) computeNextStakeModifier(node *blockNode) (uint64, bool, er
 	}
 
 	sort.Slice(nodesSortedByTimestamp, func(a, b int) bool {
-		return nodesSortedByTimestamp[a].time.After(nodesSortedByTimestamp[b].time)
+		return nodesSortedByTimestamp[a].time.Before(nodesSortedByTimestamp[b].time)
 	})
+
+	log.Debugf("length of nodes: %d", len(nodesSortedByTimestamp))
 
 	stakeModifierNew := uint64(0)
 	selectionIntervalStop := selectionIntervalStart
 	selectedBlocks := make(map[chainhash.Hash]*blockNode)
 
 	for round := 0; round < min(64, len(nodesSortedByTimestamp)); round++ {
-		selectionIntervalStop += int64(60 * 63 / (63 + ((63 - round) * 2)))
+		selectionIntervalStop += int64(3780 / (189 - round*2))
 
 		selection, err := b.selectBlockFromCandidates(nodesSortedByTimestamp, selectedBlocks, selectionIntervalStop, stakeModifier)
 
@@ -130,9 +141,11 @@ func (b *BlockChain) computeNextStakeModifier(node *blockNode) (uint64, bool, er
 		stakeModifierNew |= uint64(selection.GetStakeEntropyBit()) << uint(round)
 
 		selectedBlocks[selection.hash] = selection
+
+		log.Debugf("selected round %d: stop=%s height=%d bit=%d", round, time.Unix(selectionIntervalStop, 0).String(), selection.height, selection.GetStakeEntropyBit())
 	}
 
-	log.Debug("Stake modifier: %b\n", stakeModifierNew)
+	log.Debugf("Stake modifier: %d", stakeModifierNew)
 
 	return stakeModifierNew, true, nil
 }

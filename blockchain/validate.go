@@ -1032,6 +1032,8 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *btcutil.Block, vi
 
 			hashProofOfStakeBig := big.NewInt(0).SetBytes(hashProofOfStake[:])
 
+			log.Debugf("hash pos: %s", hashProofOfStake.String())
+
 			if !stakeTargetHit(hashProofOfStakeBig, int64(value), target) {
 				continue
 			}
