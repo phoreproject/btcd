@@ -991,8 +991,6 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *btcutil.Block, vi
 			return err
 		}
 
-		log.Debugf("reject test 2")
-
 		_, err = CheckTransactionInputs(txn, node.height, view, b.chainParams, true)
 		if err != nil {
 			return err
@@ -1031,8 +1029,6 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *btcutil.Block, vi
 			hashProofOfStake := getStakeHash(stakeModifier, uint(stakingTime.Unix()), txn.MsgTx().TxIn[0].PreviousOutPoint, uint(tryTime))
 
 			hashProofOfStakeBig := big.NewInt(0).SetBytes(hashProofOfStake[:])
-
-			log.Debugf("hash pos: %s", hashProofOfStake.String())
 
 			if !stakeTargetHit(hashProofOfStakeBig, int64(value), target) {
 				continue

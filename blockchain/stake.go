@@ -53,8 +53,6 @@ func (b *BlockChain) selectBlockFromCandidates(nodesSortedByTimestamp []timeAndB
 
 		toHash := append(hashProof[:], smb...)
 
-		log.Debugf("select blocks hash: %x", toHash)
-
 		hashSelection := chainhash.HashH(toHash)
 
 		if b.index.IsProofOfStake(node) {
@@ -88,22 +86,19 @@ const blockOneStakeModifier = 4539363955
 // was generated and if so, what the stake modifier is
 // For the genesis block, the stake modifier is 0.
 func (b *BlockChain) computeNextStakeModifier(node *blockNode) (uint64, bool, error) {
-	if node.height == 0 {
-		return 0, true, nil
-	} else if node.height == 1 {
+	if node.height == 0 || node.height == 1 {
 		return blockOneStakeModifier, true, nil
 	}
 
-	lastStakeModifierBlock := node.parent
+	lastStakeModifierBlock := node
 	for lastStakeModifierBlock != nil && !b.index.GeneratedStakeModifier(lastStakeModifierBlock) {
 		lastStakeModifierBlock = lastStakeModifierBlock.parent
 	}
 
 	stakeModifier := lastStakeModifierBlock.stakeModifier
 
-	log.Debugf("last stake modifier: %d", stakeModifier)
-
 	modifierTime := lastStakeModifierBlock.timestamp
+
 	if modifierTime/60 >= node.timestamp/60 {
 		return b.index.GetStakeModifier(lastStakeModifierBlock), false, nil
 	}
@@ -123,8 +118,6 @@ func (b *BlockChain) computeNextStakeModifier(node *blockNode) (uint64, bool, er
 		return nodesSortedByTimestamp[a].time.Before(nodesSortedByTimestamp[b].time)
 	})
 
-	log.Debugf("length of nodes: %d", len(nodesSortedByTimestamp))
-
 	stakeModifierNew := uint64(0)
 	selectionIntervalStop := selectionIntervalStart
 	selectedBlocks := make(map[chainhash.Hash]*blockNode)
@@ -141,11 +134,7 @@ func (b *BlockChain) computeNextStakeModifier(node *blockNode) (uint64, bool, er
 		stakeModifierNew |= uint64(selection.GetStakeEntropyBit()) << uint(round)
 
 		selectedBlocks[selection.hash] = selection
-
-		log.Debugf("selected round %d: stop=%s height=%d bit=%d", round, time.Unix(selectionIntervalStop, 0).String(), selection.height, selection.GetStakeEntropyBit())
 	}
-
-	log.Debugf("Stake modifier: %d", stakeModifierNew)
 
 	return stakeModifierNew, true, nil
 }
