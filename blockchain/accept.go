@@ -71,6 +71,9 @@ func (b *BlockChain) maybeAcceptBlock(block *btcutil.Block, flags BehaviorFlags)
 		newNode.workSum.Add(prevNode.workSum, newNode.workSum)
 	}
 	b.index.AddNode(newNode)
+	if block.IsProofOfStake() {
+		b.index.SetProofOfStake(newNode, true)
+	}
 	b.index.SetStakeEntropyBit(newNode, newNode.GetStakeEntropyBit())
 
 	sm, generatedStakeModifier, err := b.computeNextStakeModifier(newNode.parent)

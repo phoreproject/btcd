@@ -43,9 +43,6 @@ func (b *BlockChain) selectBlockFromCandidates(nodesSortedByTimestamp []timeAndB
 			}
 		} else {
 			hashProof = node.hash
-			for i, j := 0, len(hashProof)-1; i < j; i, j = i+1, j-1 {
-				hashProof[i], hashProof[j] = hashProof[j], hashProof[i]
-			}
 		}
 
 		smb := make([]byte, 8)
