@@ -1017,29 +1017,19 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *btcutil.Block, vi
 			return AssertError("block stake does not meet the minimum age requirement")
 		}
 
-		target := CompactToBig(block.MsgBlock().Header.Bits)
-		stakeModifier, _, _ := b.getStakeModifier(prevTxBlock.Hash())
+		// For some reason Phore didn't check timestamps for the first 500 blocks
+		if block.MsgBlock().Header.Timestamp.Unix() > 1505247602 {
+			target := CompactToBig(block.MsgBlock().Header.Bits)
+			stakeModifier, _, _ := b.getStakeModifier(prevTxBlock.Hash())
 
-		found := false
+			hashProofOfStake := getStakeHash(stakeModifier, uint(stakingTime.Unix()), txn.MsgTx().TxIn[0].PreviousOutPoint, uint(prevBlockTime.Unix()))
 
-		for i := int64(0); i < stakeHashDrift; i++ {
-			tryTime := prevBlockTime.Unix() + stakeHashDrift - i
-
-			// TODO: 32-bit time
-			hashProofOfStake := getStakeHash(stakeModifier, uint(stakingTime.Unix()), txn.MsgTx().TxIn[0].PreviousOutPoint, uint(tryTime))
-
-			hashProofOfStakeBig := big.NewInt(0).SetBytes(hashProofOfStake[:])
+			hashProofOfStakeBig := HashToBig(&hashProofOfStake)
 
 			if !stakeTargetHit(hashProofOfStakeBig, int64(value), target) {
-				continue
+				str := fmt.Sprintf("CheckProofOfStake() : INFO: check kernel failed on coinstake %s", txn.Hash().String())
+				return ruleError(ErrBadCoinstakeKernel, str)
 			}
-
-			found = true
-		}
-
-		if !found {
-			str := fmt.Sprintf("CheckProofOfStake() : INFO: check kernel failed on coinstake %s", txn.Hash().String())
-			return ruleError(ErrBadCoinstakeKernel, str)
 		}
 	}
 
