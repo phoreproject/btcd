@@ -28,29 +28,48 @@ const MaxMessagePayload = (1024 * 1024 * 32) // 32MB
 
 // Commands used in bitcoin message headers which describe the type of message.
 const (
-	CmdVersion     = "version"
-	CmdVerAck      = "verack"
-	CmdGetAddr     = "getaddr"
-	CmdAddr        = "addr"
-	CmdGetBlocks   = "getblocks"
-	CmdInv         = "inv"
-	CmdGetData     = "getdata"
-	CmdNotFound    = "notfound"
-	CmdBlock       = "block"
-	CmdTx          = "tx"
-	CmdGetHeaders  = "getheaders"
-	CmdHeaders     = "headers"
-	CmdPing        = "ping"
-	CmdPong        = "pong"
-	CmdAlert       = "alert"
-	CmdMemPool     = "mempool"
-	CmdFilterAdd   = "filteradd"
-	CmdFilterClear = "filterclear"
-	CmdFilterLoad  = "filterload"
-	CmdMerkleBlock = "merkleblock"
-	CmdReject      = "reject"
-	CmdSendHeaders = "sendheaders"
-	CmdFeeFilter   = "feefilter"
+	CmdVersion                   = "version"
+	CmdVerAck                    = "verack"
+	CmdGetAddr                   = "getaddr"
+	CmdAddr                      = "addr"
+	CmdGetBlocks                 = "getblocks"
+	CmdInv                       = "inv"
+	CmdGetData                   = "getdata"
+	CmdNotFound                  = "notfound"
+	CmdBlock                     = "block"
+	CmdTx                        = "tx"
+	CmdGetHeaders                = "getheaders"
+	CmdHeaders                   = "headers"
+	CmdPing                      = "ping"
+	CmdPong                      = "pong"
+	CmdAlert                     = "alert"
+	CmdMemPool                   = "mempool"
+	CmdFilterAdd                 = "filteradd"
+	CmdFilterClear               = "filterclear"
+	CmdFilterLoad                = "filterload"
+	CmdMerkleBlock               = "merkleblock"
+	CmdReject                    = "reject"
+	CmdSendHeaders               = "sendheaders"
+	CmdFeeFilter                 = "feefilter"
+	CmdMasternodeWinner          = "mnw"
+	CmdMasternodeProposal        = "mprop"
+	CmdMasternodeVote            = "mvote"
+	CmdTransactionLockVote       = "txlvote"
+	CmdInstantTransaction        = "ix"
+	CmdDSTransaction             = "dstx"
+	CmdFinalizedBudgetSubmission = "fbs"
+	CmdMasternodeBroadcast       = "mnb"
+	CmdMasternodePing            = "mnp"
+	CmdMasternodeGet             = "mnget"
+	CmdElectionEntryPing         = "dseep"
+	CmdElectionEntry             = "dsee"
+	CmdMasternodeList            = "dseg"
+	CmdSpork                     = "spork"
+	CmdGetSporks                 = "getsporks"
+	CmdGetSpork                  = "getspork"
+	CmdFinalizedBudgetVote       = "fbvote"
+	CmdSyncStatusCount           = "ssc"
+	CmdMasternodeVoteSync        = "mnvs"
 )
 
 // MessageEncoding represents the wire message encoding format to be used.
@@ -155,6 +174,9 @@ func makeEmptyMessage(command string) (Message, error) {
 
 	case CmdFeeFilter:
 		msg = &MsgFeeFilter{}
+
+	case CmdMasternodeWinner:
+		msg = &MsgMasternodeWinner{}
 
 	default:
 		return nil, fmt.Errorf("unhandled command [%s]", command)
