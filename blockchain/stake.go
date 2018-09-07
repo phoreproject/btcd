@@ -59,7 +59,7 @@ func (b *BlockChain) selectBlockFromCandidates(nodesSortedByTimestamp []timeAndB
 
 		hashSelectionBig := HashToBig(&hashSelection)
 
-		if selected && hashSelectionBig.Cmp(hashBest) > 0 {
+		if selected && hashSelectionBig.Cmp(hashBest) < 0 {
 			hashBest = hashSelectionBig
 			selectedBlock = node
 		} else if !selected {
@@ -112,6 +112,9 @@ func (b *BlockChain) computeNextStakeModifier(node *blockNode) (uint64, bool, er
 	}
 
 	sort.Slice(nodesSortedByTimestamp, func(a, b int) bool {
+		if nodesSortedByTimestamp[a].time.Unix() == nodesSortedByTimestamp[b].time.Unix() {
+			return HashToBig(&nodesSortedByTimestamp[a].node.hash).Cmp(HashToBig(&nodesSortedByTimestamp[b].node.hash)) < 0
+		}
 		return nodesSortedByTimestamp[a].time.Before(nodesSortedByTimestamp[b].time)
 	})
 

@@ -914,7 +914,7 @@ func getStakeHash(stakeModifier uint64, time uint, prevout wire.OutPoint, timeBl
 			)...,
 		)...,
 	)
-	return chainhash.HashH(hashInput)
+	return chainhash.DoubleHashH(hashInput)
 }
 
 func stakeTargetHit(hashProofOfStake *big.Int, valueIn int64, targetPerCoinDay *big.Int) bool {
