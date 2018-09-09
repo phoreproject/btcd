@@ -178,6 +178,15 @@ func makeEmptyMessage(command string) (Message, error) {
 	case CmdMasternodeWinner:
 		msg = &MsgMasternodeWinner{}
 
+	case CmdMasternodeProposal:
+		msg = &MsgBudgetProposalBroadcast{}
+
+	case CmdMasternodeVote:
+		msg = &MsgBudgetVote{}
+
+	case CmdElectionEntryPing:
+		msg = &MsgElectionEntryPing{}
+
 	default:
 		return nil, fmt.Errorf("unhandled command [%s]", command)
 	}

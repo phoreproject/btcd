@@ -20,7 +20,12 @@ type MsgMasternodeWinner struct {
 // BtcDecode decodes r using the bitcoin protocol encoding into the receiver.
 // This is part of the Message interface implementation.
 func (msg *MsgMasternodeWinner) BtcDecode(r io.Reader, pver uint32, enc MessageEncoding) error {
-	err := readElements(r, &msg.MasternodeInput, &msg.BlockHeight)
+	err := readTxIn(r, pver, 0, &msg.MasternodeInput)
+	if err != nil {
+		return err
+	}
+
+	err = readElement(r, &msg.BlockHeight)
 	if err != nil {
 		return err
 	}
@@ -42,7 +47,12 @@ func (msg *MsgMasternodeWinner) BtcDecode(r io.Reader, pver uint32, enc MessageE
 // BtcEncode encodes the receiver to w using the bitcoin protocol encoding.
 // This is part of the Message interface implementation.
 func (msg *MsgMasternodeWinner) BtcEncode(w io.Writer, pver uint32, enc MessageEncoding) error {
-	err := writeElements(w, msg.MasternodeInput, msg.BlockHeight)
+	err := writeTxIn(w, pver, 0, &msg.MasternodeInput)
+	if err != nil {
+		return err
+	}
+
+	err = writeElement(w, msg.BlockHeight)
 	if err != nil {
 		return err
 	}
