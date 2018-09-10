@@ -59,6 +59,12 @@ func IsScriptZerocoinMint(signature []byte) bool {
 	return len(signature) > 0 && signature[0] == txscript.OP_ZEROCOINMINT
 }
 
+// IsScriptZerocoinSpend checks if a given script is a zerocoin minting
+// script.
+func IsScriptZerocoinSpend(signature []byte) bool {
+	return len(signature) > 0 && signature[0] == txscript.OP_ZEROCOINSPEND
+}
+
 // IsZerocoinMint checks if a given script is a zerocoin minting
 // transaction.
 func IsZerocoinMint(msg *wire.MsgTx) bool {
@@ -74,6 +80,25 @@ func IsZerocoinMint(msg *wire.MsgTx) bool {
 // either a spend or mint transaction of Zerocoins
 func ContainsZerocoins(msg *wire.MsgTx) bool {
 	return IsZerocoinSpend(msg) || IsZerocoinMint(msg)
+}
+
+// GetZerocoinIn returns the number of zerocoin used as
+// input to a transaction
+func GetZerocoinIn(msg *wire.MsgTx) int64 {
+	if !IsZerocoinSpend(msg) {
+		return 0
+	}
+
+	value := int64(0)
+	for _, txin := range msg.TxIn {
+		if !IsScriptZerocoinSpend(txin.SignatureScript) {
+			continue
+		}
+
+		value += int64(txin.Sequence * btcutil.SatoshiPerBitcoin)
+	}
+
+	return value
 }
 
 // IsCoinBaseTx determines whether or not a transaction is a coinbase.  A coinbase
@@ -281,7 +306,7 @@ func CheckTransactionSanity(tx *btcutil.Tx) error {
 		// Previous transaction outputs referenced by the inputs to this
 		// transaction must not be null.
 		for _, txIn := range msgTx.TxIn {
-			if ContainsZerocoins(tx.MsgTx()) {
+			if IsZerocoinSpend(tx.MsgTx()) {
 				continue
 			}
 			prevOut := &txIn.PreviousOutPoint
@@ -363,7 +388,7 @@ func CountSigOps(tx *btcutil.Tx) int {
 // requires access to the input transaction scripts.
 func CountP2SHSigOps(tx *btcutil.Tx, isCoinBaseTx bool, utxoView *UtxoViewpoint) (int, error) {
 	// Coinbase transactions have no interesting inputs.
-	if isCoinBaseTx {
+	if isCoinBaseTx || ContainsZerocoins(tx.MsgTx()) {
 		return 0, nil
 	}
 
@@ -810,68 +835,72 @@ func CheckTransactionInputs(tx *btcutil.Tx, txHeight int32, utxoView *UtxoViewpo
 
 	txHash := tx.Hash()
 	var totalSatoshiIn int64
-	for txInIndex, txIn := range tx.MsgTx().TxIn {
-		// Ensure the referenced input transaction is available.
-		originTxHash := &txIn.PreviousOutPoint.Hash
-		originTxIndex := txIn.PreviousOutPoint.Index
-		utxoEntry := utxoView.LookupEntry(originTxHash)
-		if utxoEntry == nil || utxoEntry.IsOutputSpent(originTxIndex) {
-			str := fmt.Sprintf("output %v referenced from "+
-				"transaction %s:%d either does not exist or "+
-				"has already been spent", txIn.PreviousOutPoint,
-				tx.Hash(), txInIndex)
-			return 0, ruleError(ErrMissingTxOut, str)
-		}
-
-		// Ensure the transaction is not spending coins which have not
-		// yet reached the required coinbase maturity.
-		if utxoEntry.IsCoinBase() {
-			originHeight := utxoEntry.BlockHeight()
-			blocksSincePrev := txHeight - originHeight
-			coinbaseMaturity := int32(chainParams.CoinbaseMaturity)
-			if blocksSincePrev < coinbaseMaturity {
-				str := fmt.Sprintf("tried to spend coinbase "+
-					"transaction %v from height %v at "+
-					"height %v before required maturity "+
-					"of %v blocks", originTxHash,
-					originHeight, txHeight,
-					coinbaseMaturity)
-				return 0, ruleError(ErrImmatureSpend, str)
+	if IsZerocoinSpend(tx.MsgTx()) {
+		totalSatoshiIn = GetZerocoinIn(tx.MsgTx())
+	} else {
+		for txInIndex, txIn := range tx.MsgTx().TxIn {
+			// Ensure the referenced input transaction is available.
+			originTxHash := &txIn.PreviousOutPoint.Hash
+			originTxIndex := txIn.PreviousOutPoint.Index
+			utxoEntry := utxoView.LookupEntry(originTxHash)
+			if utxoEntry == nil || utxoEntry.IsOutputSpent(originTxIndex) {
+				str := fmt.Sprintf("output %v referenced from "+
+					"transaction %s:%d either does not exist or "+
+					"has already been spent", txIn.PreviousOutPoint,
+					tx.Hash(), txInIndex)
+				return 0, ruleError(ErrMissingTxOut, str)
 			}
-		}
 
-		// Ensure the transaction amounts are in range.  Each of the
-		// output values of the input transactions must not be negative
-		// or more than the max allowed per transaction.  All amounts in
-		// a transaction are in a unit value known as a satoshi.  One
-		// bitcoin is a quantity of satoshi as defined by the
-		// SatoshiPerBitcoin constant.
-		originTxSatoshi := utxoEntry.AmountByIndex(originTxIndex)
-		if originTxSatoshi < 0 {
-			str := fmt.Sprintf("transaction output has negative "+
-				"value of %v", btcutil.Amount(originTxSatoshi))
-			return 0, ruleError(ErrBadTxOutValue, str)
-		}
-		if originTxSatoshi > btcutil.MaxSatoshi {
-			str := fmt.Sprintf("transaction output value of %v is "+
-				"higher than max allowed value of %v",
-				btcutil.Amount(originTxSatoshi),
-				btcutil.MaxSatoshi)
-			return 0, ruleError(ErrBadTxOutValue, str)
-		}
+			// Ensure the transaction is not spending coins which have not
+			// yet reached the required coinbase maturity.
+			if utxoEntry.IsCoinBase() {
+				originHeight := utxoEntry.BlockHeight()
+				blocksSincePrev := txHeight - originHeight
+				coinbaseMaturity := int32(chainParams.CoinbaseMaturity)
+				if blocksSincePrev < coinbaseMaturity {
+					str := fmt.Sprintf("tried to spend coinbase "+
+						"transaction %v from height %v at "+
+						"height %v before required maturity "+
+						"of %v blocks", originTxHash,
+						originHeight, txHeight,
+						coinbaseMaturity)
+					return 0, ruleError(ErrImmatureSpend, str)
+				}
+			}
 
-		// The total of all outputs must not be more than the max
-		// allowed per transaction.  Also, we could potentially overflow
-		// the accumulator so check for overflow.
-		lastSatoshiIn := totalSatoshiIn
-		totalSatoshiIn += originTxSatoshi
-		if totalSatoshiIn < lastSatoshiIn ||
-			totalSatoshiIn > btcutil.MaxSatoshi {
-			str := fmt.Sprintf("total value of all transaction "+
-				"inputs is %v which is higher than max "+
-				"allowed value of %v", totalSatoshiIn,
-				btcutil.MaxSatoshi)
-			return 0, ruleError(ErrBadTxOutValue, str)
+			// Ensure the transaction amounts are in range.  Each of the
+			// output values of the input transactions must not be negative
+			// or more than the max allowed per transaction.  All amounts in
+			// a transaction are in a unit value known as a satoshi.  One
+			// bitcoin is a quantity of satoshi as defined by the
+			// SatoshiPerBitcoin constant.
+			originTxSatoshi := utxoEntry.AmountByIndex(originTxIndex)
+			if originTxSatoshi < 0 {
+				str := fmt.Sprintf("transaction output has negative "+
+					"value of %v", btcutil.Amount(originTxSatoshi))
+				return 0, ruleError(ErrBadTxOutValue, str)
+			}
+			if originTxSatoshi > btcutil.MaxSatoshi {
+				str := fmt.Sprintf("transaction output value of %v is "+
+					"higher than max allowed value of %v",
+					btcutil.Amount(originTxSatoshi),
+					btcutil.MaxSatoshi)
+				return 0, ruleError(ErrBadTxOutValue, str)
+			}
+
+			// The total of all outputs must not be more than the max
+			// allowed per transaction.  Also, we could potentially overflow
+			// the accumulator so check for overflow.
+			lastSatoshiIn := totalSatoshiIn
+			totalSatoshiIn += originTxSatoshi
+			if totalSatoshiIn < lastSatoshiIn ||
+				totalSatoshiIn > btcutil.MaxSatoshi {
+				str := fmt.Sprintf("total value of all transaction "+
+					"inputs is %v which is higher than max "+
+					"allowed value of %v", totalSatoshiIn,
+					btcutil.MaxSatoshi)
+				return 0, ruleError(ErrBadTxOutValue, str)
+			}
 		}
 	}
 
