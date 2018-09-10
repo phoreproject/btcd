@@ -624,7 +624,7 @@ func (b *BlockChain) checkBlockHeaderContext(header *wire.BlockHeader, prevNode 
 	// has upgraded.  These were originally voted on by BIP0034,
 	// BIP0065, and BIP0066.
 	params := b.chainParams
-	if header.Version < 4 && blockHeight >= params.ZerocoinStartHeight {
+	if header.Version < 4 && blockHeight > params.ZerocoinStartHeight {
 		str := "new blocks with version %d are no longer valid"
 		str = fmt.Sprintf(str, header.Version)
 		return ruleError(ErrBlockVersionTooOld, str)

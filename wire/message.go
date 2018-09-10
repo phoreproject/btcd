@@ -187,6 +187,9 @@ func makeEmptyMessage(command string) (Message, error) {
 	case CmdElectionEntryPing:
 		msg = &MsgElectionEntryPing{}
 
+	case CmdSyncStatusCount:
+		msg = &MsgSyncStatusCount{}
+
 	default:
 		return nil, fmt.Errorf("unhandled command [%s]", command)
 	}
