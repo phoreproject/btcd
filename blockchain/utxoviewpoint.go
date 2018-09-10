@@ -283,43 +283,45 @@ func (view *UtxoViewpoint) connectTransaction(tx *btcutil.Tx, blockHeight int32,
 		return nil
 	}
 
-	// Spend the referenced utxos by marking them spent in the view and,
-	// if a slice was provided for the spent txout details, append an entry
-	// to it.
-	for _, txIn := range tx.MsgTx().TxIn {
-		originIndex := txIn.PreviousOutPoint.Index
-		entry := view.entries[txIn.PreviousOutPoint.Hash]
+	if !IsZerocoinSpend(tx.MsgTx()) {
+		// Spend the referenced utxos by marking them spent in the view and,
+		// if a slice was provided for the spent txout details, append an entry
+		// to it.
+		for _, txIn := range tx.MsgTx().TxIn {
+			originIndex := txIn.PreviousOutPoint.Index
+			entry := view.entries[txIn.PreviousOutPoint.Hash]
 
-		// Ensure the referenced utxo exists in the view.  This should
-		// never happen unless there is a bug is introduced in the code.
-		if entry == nil {
-			return AssertError(fmt.Sprintf("view missing input %v",
-				txIn.PreviousOutPoint))
-		}
-		entry.SpendOutput(originIndex)
+			// Ensure the referenced utxo exists in the view.  This should
+			// never happen unless there is a bug is introduced in the code.
+			if entry == nil {
+				return AssertError(fmt.Sprintf("view missing input %v",
+					txIn.PreviousOutPoint))
+			}
+			entry.SpendOutput(originIndex)
 
-		// Don't create the stxo details if not requested.
-		if stxos == nil {
-			continue
-		}
+			// Don't create the stxo details if not requested.
+			if stxos == nil {
+				continue
+			}
 
-		// Populate the stxo details using the utxo entry.  When the
-		// transaction is fully spent, set the additional stxo fields
-		// accordingly since those details will no longer be available
-		// in the utxo set.
-		var stxo = spentTxOut{
-			compressed: false,
-			version:    entry.Version(),
-			amount:     entry.AmountByIndex(originIndex),
-			pkScript:   entry.PkScriptByIndex(originIndex),
-		}
-		if entry.IsFullySpent() {
-			stxo.height = entry.BlockHeight()
-			stxo.isCoinBase = entry.IsCoinBase()
-		}
+			// Populate the stxo details using the utxo entry.  When the
+			// transaction is fully spent, set the additional stxo fields
+			// accordingly since those details will no longer be available
+			// in the utxo set.
+			var stxo = spentTxOut{
+				compressed: false,
+				version:    entry.Version(),
+				amount:     entry.AmountByIndex(originIndex),
+				pkScript:   entry.PkScriptByIndex(originIndex),
+			}
+			if entry.IsFullySpent() {
+				stxo.height = entry.BlockHeight()
+				stxo.isCoinBase = entry.IsCoinBase()
+			}
 
-		// Append the entry to the provided spent txouts slice.
-		*stxos = append(*stxos, stxo)
+			// Append the entry to the provided spent txouts slice.
+			*stxos = append(*stxos, stxo)
+		}
 	}
 
 	// Add the transaction's outputs as available utxos.
