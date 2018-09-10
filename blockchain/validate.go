@@ -47,6 +47,35 @@ var (
 	zeroHash = &chainhash.Hash{}
 )
 
+// IsZerocoinSpend returns true if the transaction is a zerocoin spending
+// transaction.
+func IsZerocoinSpend(msg *wire.MsgTx) bool {
+	return len(msg.TxIn) > 0 && msg.TxIn[0].PreviousOutPoint.Hash.IsEqual(zeroHash) && len(msg.TxIn[0].SignatureScript) > 0 && msg.TxIn[0].SignatureScript[0] == txscript.OP_ZEROCOINSPEND
+}
+
+// IsScriptZerocoinMint checks if a given script is a zerocoin minting
+// script.
+func IsScriptZerocoinMint(signature []byte) bool {
+	return len(signature) > 0 && signature[0] == txscript.OP_ZEROCOINMINT
+}
+
+// IsZerocoinMint checks if a given script is a zerocoin minting
+// transaction.
+func IsZerocoinMint(msg *wire.MsgTx) bool {
+	for _, txOut := range msg.TxOut {
+		if IsScriptZerocoinMint(txOut.PkScript) {
+			return true
+		}
+	}
+	return false
+}
+
+// ContainsZerocoins returns true if the transaction is
+// either a spend or mint transaction of Zerocoins
+func ContainsZerocoins(msg *wire.MsgTx) bool {
+	return IsZerocoinSpend(msg) || IsZerocoinMint(msg)
+}
+
 // IsCoinBaseTx determines whether or not a transaction is a coinbase.  A coinbase
 // is a special transaction created by miners that has no inputs.  This is
 // represented in the block chain by a transaction with a single input that has
@@ -65,6 +94,10 @@ func IsCoinBaseTx(msgTx *wire.MsgTx) bool {
 	// a zero hash.
 	prevOut := &msgTx.TxIn[0].PreviousOutPoint
 	if prevOut.Index != math.MaxUint32 || !prevOut.Hash.IsEqual(zeroHash) {
+		return false
+	}
+
+	if ContainsZerocoins(msgTx) {
 		return false
 	}
 
@@ -248,6 +281,9 @@ func CheckTransactionSanity(tx *btcutil.Tx) error {
 		// Previous transaction outputs referenced by the inputs to this
 		// transaction must not be null.
 		for _, txIn := range msgTx.TxIn {
+			if ContainsZerocoins(tx.MsgTx()) {
+				continue
+			}
 			prevOut := &txIn.PreviousOutPoint
 			if wire.IsNullOutpoint(prevOut) {
 				return ruleError(ErrBadTxInput, "transaction "+
