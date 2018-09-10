@@ -11,8 +11,8 @@ import (
 // MsgSyncStatusCount implements the Message interface and represents a bitcoin pong
 // message which is used to sync the number of different assets available.
 type MsgSyncStatusCount struct {
-	ItemID int
-	Count  int
+	ItemID int32
+	Count  int32
 }
 
 // BtcDecode decodes r using the bitcoin protocol encoding into the receiver.
