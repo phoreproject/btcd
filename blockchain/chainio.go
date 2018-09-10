@@ -1170,8 +1170,20 @@ func (b *BlockChain) initChainState() error {
 				node.parent = tip
 				node.workSum = node.workSum.Add(tip.workSum,
 					node.workSum)
+				b.index.AddNode(node)
+				if uint32(height) > b.chainParams.LastPoWBlock {
+					b.index.SetProofOfStake(node, true)
+				}
+				b.index.SetStakeEntropyBit(node, node.GetStakeEntropyBit())
+
+				sm, generatedStakeModifier, err := b.computeNextStakeModifier(node.parent)
+				if err != nil {
+					return err
+				}
+				b.index.SetStakeModifier(node, sm, generatedStakeModifier)
+			} else {
+				b.index.AddNode(node)
 			}
-			b.index.AddNode(node)
 
 			// This node is now the end of the best chain.
 			tip = node
