@@ -237,6 +237,10 @@ func (msg *MsgBlock) SerializeSize() int {
 	// transactions.
 	n := blockHeaderLen + VarIntSerializeSize(uint64(len(msg.Transactions)))
 
+	if msg.Header.Version > 3 {
+		n += 32 // acc checkpoint
+	}
+
 	for _, tx := range msg.Transactions {
 		n += tx.SerializeSize()
 	}
@@ -250,6 +254,10 @@ func (msg *MsgBlock) SerializeSizeStripped() int {
 	// Block header bytes + Serialized varint size for the number of
 	// transactions.
 	n := blockHeaderLen + VarIntSerializeSize(uint64(len(msg.Transactions)))
+
+	if msg.Header.Version > 3 {
+		n += 32 // acc checkpoint
+	}
 
 	for _, tx := range msg.Transactions {
 		n += tx.SerializeSizeStripped()

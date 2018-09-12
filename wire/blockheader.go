@@ -15,7 +15,7 @@ import (
 // MaxBlockHeaderPayload is the maximum number of bytes a block header can be.
 // Version 4 bytes + Timestamp 4 bytes + Bits 4 bytes + Nonce 4 bytes +
 // PrevBlock and MerkleRoot hashes.
-const MaxBlockHeaderPayload = 16 + (chainhash.HashSize * 2)
+const MaxBlockHeaderPayload = 16 + (chainhash.HashSize * 3)
 
 // BlockHeader defines information about a block and is used in the bitcoin
 // block (MsgBlock) and headers (MsgHeaders) messages.
@@ -145,7 +145,7 @@ func writeBlockHeader(w io.Writer, pver uint32, bh *BlockHeader) error {
 		return err
 	}
 	if bh.Version > 3 {
-		if err := writeElement(w, &bh.AccumulatorCheckpoint); err != nil {
+		if err := writeElement(w, bh.AccumulatorCheckpoint); err != nil {
 			return err
 		}
 	}
