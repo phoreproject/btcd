@@ -718,7 +718,7 @@ func (b *BlockChain) checkBlockContext(block *btcutil.Block, prevNode *blockNode
 		// Obtain the latest state of the deployed CSV soft-fork in
 		// order to properly guard the new validation behavior based on
 		// the current BIP 9 version bits state.
-		csvState := false
+		csvState := true
 
 		// Once the CSV soft-fork is fully active, we'll switch to
 		// using the current median time past of the past block's
@@ -746,7 +746,7 @@ func (b *BlockChain) checkBlockContext(block *btcutil.Block, prevNode *blockNode
 		// Query for the Version Bits state for the segwit soft-fork
 		// deployment. If segwit is active, we'll switch over to
 		// enforcing all the new rules.
-		segwitState := false
+		segwitState := true
 
 		// If segwit is active, then we'll need to fully validate the
 		// new witness commitment for adherance to the rules.
@@ -1102,12 +1102,12 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *btcutil.Block, vi
 	// "standard" type.  The rules for this BIP only apply to transactions
 	// after the timestamp defined by txscript.Bip16Activation.  See
 	// https://en.bitcoin.it/wiki/BIP_0016 for more details.
-	enforceBIP0016 := node.timestamp >= txscript.Bip16Activation.Unix()
+	enforceBIP0016 := true
 
 	// Query for the Version Bits state for the segwit soft-fork
 	// deployment. If segwit is active, we'll switch over to enforcing all
 	// the new rules.
-	enforceSegWit := false
+	enforceSegWit := true
 
 	// The number of signature operations must be less than the maximum
 	// allowed per block.  Note that the preliminary sanity checks on a
@@ -1233,7 +1233,7 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *btcutil.Block, vi
 
 	// Enforce CHECKSEQUENCEVERIFY during all block validation checks once
 	// the soft-fork deployment is fully active.
-	csvState := false
+	csvState := true
 	if csvState {
 		// If the CSV soft-fork is now active, then modify the
 		// scriptFlags to ensure that the CSV op code is properly

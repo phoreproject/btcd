@@ -609,9 +609,9 @@ mempoolLoop:
 	// so then this means that we'll include any transactions with witness
 	// data in the mempool, and also add the witness commitment as an
 	// OP_RETURN output in the coinbase transaction.
-	segwitActive := false
+	segwitActive := true
 
-	witnessIncluded := false
+	witnessIncluded := true
 
 	// Choose which transactions make it into the block.
 	for priorityQueue.Len() > 0 {

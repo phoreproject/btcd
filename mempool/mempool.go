@@ -617,7 +617,7 @@ func (mp *TxPool) maybeAcceptTransaction(tx *btcutil.Tx, isNew, rateLimit, rejec
 	// segwit isn't active yet, then we won't accept it into the mempool as
 	// it can't be mined yet.
 	if tx.MsgTx().HasWitness() {
-		segwitActive := false
+		segwitActive := true
 
 		if !segwitActive {
 			str := fmt.Sprintf("transaction %v has witness data, "+

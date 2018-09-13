@@ -395,7 +395,7 @@ func (sp *serverPeer) OnVersion(_ *peer.Peer, msg *wire.MsgVersion) {
 			// After soft-fork activation, only make outbound
 			// connection to peers if they flag that they're segwit
 			// enabled.
-			segwitActive := false
+			segwitActive := true
 			if segwitActive && !sp.IsWitnessEnabled() {
 				peerLog.Infof("Disconnecting non-segwit "+
 					"peer %v, isn't segwit enabled and "+
