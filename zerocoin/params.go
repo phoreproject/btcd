@@ -315,7 +315,7 @@ func calculateGroupModulusAndOrder(seed *chainhash.Hash, pLen uint32, qLen uint3
 		return nil, nil, nil, nil, err
 	}
 
-	p0len := uint32(math.Ceil(float64(pLen)/2) + 1)
+	p0len := uint32(math.Ceil(float64(pLen)/2.0 + 1))
 	pseed, pgencounter, p0, err := generateRandomPrime(p0len, qseed)
 	if err != nil {
 		return nil, nil, nil, nil, err
@@ -379,7 +379,7 @@ func calculateGroupModulusAndOrder(seed *chainhash.Hash, pLen uint32, qLen uint3
 
 		zMinusOne := new(big.Int).Sub(z, bigOne)
 
-		if resultModulus.GCD(nil, nil, resultModulus, zMinusOne).Cmp(bigOne) == 0 && z.Exp(z, p0, resultModulus).Cmp(bigOne) == 0 {
+		if new(big.Int).GCD(nil, nil, resultModulus, zMinusOne).Cmp(bigOne) == 0 && new(big.Int).Exp(z, p0, resultModulus).Cmp(bigOne) == 0 {
 			return resultModulus, resultGroupOrder, pseed, qseed, nil
 		}
 
@@ -628,7 +628,10 @@ const zerocoinProtocolVersion = "1"
 // NewZerocoinParams returns a new set of Zerocoin params given a certain modulus.
 func NewZerocoinParams(N *big.Int, securityLevel uint32) (*Params, error) {
 	params := &Params{
-		AccumulatorParams: &AccumulatorAndProofParams{},
+		AccumulatorParams: &AccumulatorAndProofParams{
+			AccumulatorQRNCommitmentGroup: &IntegerGroupParams{},
+			AccumulatorPoKCommitmentGroup: &IntegerGroupParams{},
+		},
 	}
 	params.ZKPHashLength = securityLevel
 	params.ZKPIterations = securityLevel
