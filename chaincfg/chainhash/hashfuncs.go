@@ -7,12 +7,13 @@ package chainhash
 
 import (
 	"crypto/sha256"
-	"gitlab.com/nitya-sattva/go-x11/blake"
-	"gitlab.com/nitya-sattva/go-x11/bmw"
-	"gitlab.com/nitya-sattva/go-x11/groest"
-	"gitlab.com/nitya-sattva/go-x11/jhash"
-	"gitlab.com/nitya-sattva/go-x11/keccak"
-	"gitlab.com/nitya-sattva/go-x11/skein"
+
+	"github.com/phoreproject/go-x11/blake"
+	"github.com/phoreproject/go-x11/bmw"
+	"github.com/phoreproject/go-x11/groest"
+	"github.com/phoreproject/go-x11/jhash"
+	"github.com/phoreproject/go-x11/keccak"
+	"github.com/phoreproject/go-x11/skein"
 )
 
 // HashB calculates hash(b) and returns the resulting bytes.
