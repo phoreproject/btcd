@@ -55,14 +55,3 @@ func (p PublicCoin) Validate() bool {
 func (p PublicCoin) Equal(pub2 PublicCoin) bool {
 	return p.value == pub2.value && p.params == pub2.params && p.denomination == pub2.denomination
 }
-
-// PrivateCoin is the private part of a Zerocoin containing
-// the serial number, the commitment to the serial number, and
-// opening randomness for the commitment.
-type PrivateCoin struct {
-	params       *Params
-	publicCoin   *PublicCoin
-	randomness   *big.Int
-	serialNumber *big.Int
-	privKey      []byte
-}
