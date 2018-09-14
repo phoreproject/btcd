@@ -92,7 +92,7 @@ func calculateSeed(modulus *big.Int, auxString string, securityLevel uint32, gro
 
 	separator := []byte("||")
 
-	modulusBytes := BigToLittleBytes(modulus)
+	modulusBytes := SerializeBigNum(modulus)
 
 	hashInput := appendAll(modulusBytes[:], separator, secLevelBytes[:], separator, []byte(auxString), separator, []byte(groupName))
 

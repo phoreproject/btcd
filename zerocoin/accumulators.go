@@ -1,8 +1,12 @@
 package zerocoin
 
 import (
+	"encoding/binary"
 	"errors"
+	"math"
 	"math/big"
+
+	"github.com/phoreproject/btcd/chaincfg/chainhash"
 )
 
 // Accumulator represents an RSA-based accumulator.
@@ -100,5 +104,93 @@ func (a AccumulatorWitness) VerifyWitness(acc *Accumulator, p *PublicCoin) (bool
 	return temp.value == acc.value && a.element.Equal(*p), nil
 }
 
-// Accumulators each denomination of accumulator.
-type Accumulators map[Denomination]Accumulator
+// AccumulatorMap each denomination of accumulator.
+type AccumulatorMap struct {
+	accs   map[Denomination]*Accumulator
+	params *Params
+}
+
+// NewAccumulatorMap creates a new map of
+func NewAccumulatorMap(params *Params) (*AccumulatorMap, error) {
+	acc := &AccumulatorMap{}
+	acc.params = params
+	acc.accs = make(map[Denomination]*Accumulator)
+	for _, d := range ZerocoinDenominations {
+		a, err := NewAccumulator(params.AccumulatorParams, d)
+		if err != nil {
+			return nil, err
+		}
+		acc.accs[d] = a
+	}
+	return acc, nil
+}
+
+// Reset resets the accumulators to their default values.
+func (a *AccumulatorMap) Reset() error {
+	// construct a blank acc map given the parameters
+	a1, err := NewAccumulatorMap(a.params)
+	if err != nil {
+		return err
+	}
+
+	a = a1
+	return nil
+}
+
+// Read reads the accumulator value for a certain denomination
+func (a *AccumulatorMap) Read(d Denomination) *big.Int {
+	return a.accs[d].value
+}
+
+// Accumulate adds a zerocoin to the accumulator of its denomination
+func (a *AccumulatorMap) Accumulate(p PublicCoin) error {
+	denom := p.denomination
+
+	if denom == DenomError {
+		return errors.New("attempted to accumulate an invalid pubcoin")
+	}
+
+	return a.accs[denom].Accumulate(&p)
+}
+
+// SetValue sets the value of one of the accumulators
+func (a *AccumulatorMap) SetValue(d Denomination, i *big.Int) {
+	a.accs[d].value = i
+}
+
+// SerializeBigNum serializes a big integer like openssl would
+func SerializeBigNum(b *big.Int) []byte {
+	length := uint32(math.Ceil(float64(b.BitLen()) / 8))
+	var lengthBytes [4]byte
+	binary.BigEndian.PutUint32(lengthBytes[:], length)
+	return append(lengthBytes[:], b.Bytes()...)
+}
+
+// GetChecksum calculates the checksum of a zerocoin accumulator
+// value.
+func GetChecksum(b *big.Int) uint32 {
+	h := chainhash.HashH(SerializeBigNum(b))
+	n := HashToBig(&h).Bytes()
+	lower32 := n[len(n)-5:]
+	return binary.BigEndian.Uint32(lower32)
+}
+
+// GetCheckpoint gets the checksum of all of the accumulators
+// contained in the map.
+func (a *AccumulatorMap) GetCheckpoint() *big.Int {
+	checkpoint := big.NewInt(0)
+
+	for _, d := range ZerocoinDenominations {
+		value := a.Read(d)
+
+		checkpoint.Lsh(checkpoint, 32)
+		checkpoint.Or(checkpoint, big.NewInt(int64(GetChecksum(value))))
+	}
+	return checkpoint
+}
+
+// SetZerocoinParams sets new parameters and resets the accumulator
+func (a *AccumulatorMap) SetZerocoinParams(params *Params) {
+	a.params = params
+	a.Reset()
+}

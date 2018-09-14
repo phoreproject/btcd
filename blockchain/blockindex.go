@@ -115,6 +115,10 @@ type blockNode struct {
 
 	// flags is the proof-of-stake bitfield for the block
 	flags uint
+
+	// accumulatorCheckpoint is the zerocoin accumulator checkpoint for the
+	// block.
+	accumulatorCheckpoint chainhash.Hash
 }
 
 // initBlockNode initializes a block node from the given header and height.  The

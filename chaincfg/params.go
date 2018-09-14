@@ -142,8 +142,12 @@ type Params struct {
 	// activated.
 	LastPoWBlock uint32
 
-	// Height of the first block in which Zeroocin transactions are valid.
+	// Height of the first block in which Zerocoin transactions are valid.
 	ZerocoinStartHeight int32
+
+	// Height of the last block Zerocoin used the old modulus before switching
+	// to V2.
+	ZerocoinLastOldParams int32
 
 	// TargetTimespan is the desired amount of time that should elapse
 	// before the block difficulty requirement is examined to determine how
@@ -242,6 +246,7 @@ var MainNetParams = Params{
 	MasternodeDriftCount:     20,
 	LastPoWBlock:             200,
 	ZerocoinStartHeight:      89993,
+	ZerocoinLastOldParams:    99999999,
 	StakeMinimumAge:          time.Hour * 3,
 	ModifierV2StartBlock:     433160,
 
