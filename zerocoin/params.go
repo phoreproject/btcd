@@ -255,52 +255,51 @@ func generateRandomPrime(pLen uint32, seed *chainhash.Hash) (*chainhash.Hash, ui
 		}
 
 		return nil, 0, nil, errors.New("Unable to find prime in Shawe-Taylor algorithm")
-	} else {
-		newLength := uint32(math.Ceil(float64(pLen)/2.0)) + 1
-		outSeed, primeGenCounter, c0, err := generateRandomPrime(newLength, seed)
-		if err != nil {
-			return nil, 0, nil, err
+	}
+	newLength := uint32(math.Ceil(float64(pLen)/2.0)) + 1
+	outSeed, primeGenCounter, c0, err := generateRandomPrime(newLength, seed)
+	if err != nil {
+		return nil, 0, nil, err
+	}
+
+	x, numIterations := generateIntegerFromSeed(pLen, outSeed)
+	h := HashToBig(outSeed)
+	h.Add(h, big.NewInt(int64(numIterations+1)))
+	h.Mod(h, oneLsh256Minus1)
+	outSeed, _ = BigToHash(h)
+
+	t := x.Div(x, new(big.Int).Mul(big.NewInt(2), c0))
+
+	for i := 0; i < maxPrimeGenerationAttempts; i++ {
+		left := new(big.Int).Mul(new(big.Int).Mul(t, c0), big.NewInt(2))
+		right := new(big.Int).Lsh(big.NewInt(1), uint(pLen))
+		if left.Cmp(right) > 0 {
+			c0doubled := new(big.Int).Mul(c0, big.NewInt(2))
+			t = new(big.Int).Div(new(big.Int).Sub(new(big.Int).Lsh(bigOne, uint(pLen)), bigOne), c0doubled)
 		}
 
-		x, numIterations := generateIntegerFromSeed(pLen, outSeed)
+		c := new(big.Int).Add(new(big.Int).Mul(new(big.Int).Mul(big.NewInt(2), t), c0), bigOne)
+
+		primeGenCounter++
+
+		a, numIterations := generateIntegerFromSeed(uint32(c.BitLen()), outSeed)
+
+		a = new(big.Int).Mod(a, new(big.Int).Sub(c, big.NewInt(3)))
+		a.Add(a, big.NewInt(2))
+
 		h := HashToBig(outSeed)
 		h.Add(h, big.NewInt(int64(numIterations+1)))
 		h.Mod(h, oneLsh256Minus1)
 		outSeed, _ = BigToHash(h)
 
-		t := x.Div(x, new(big.Int).Mul(big.NewInt(2), c0))
+		z := new(big.Int).Exp(a, new(big.Int).Mul(big.NewInt(2), t), c)
 
-		for i := 0; i < maxPrimeGenerationAttempts; i++ {
-			left := new(big.Int).Mul(new(big.Int).Mul(t, c0), big.NewInt(2))
-			right := new(big.Int).Lsh(big.NewInt(1), uint(pLen))
-			if left.Cmp(right) > 0 {
-				c0doubled := new(big.Int).Mul(c0, big.NewInt(2))
-				t = new(big.Int).Div(new(big.Int).Sub(new(big.Int).Lsh(bigOne, uint(pLen)), bigOne), c0doubled)
-			}
-
-			c := new(big.Int).Add(new(big.Int).Mul(new(big.Int).Mul(big.NewInt(2), t), c0), bigOne)
-
-			primeGenCounter++
-
-			a, numIterations := generateIntegerFromSeed(uint32(c.BitLen()), outSeed)
-
-			a = new(big.Int).Mod(a, new(big.Int).Sub(c, big.NewInt(3)))
-			a.Add(a, big.NewInt(2))
-
-			h := HashToBig(outSeed)
-			h.Add(h, big.NewInt(int64(numIterations+1)))
-			h.Mod(h, oneLsh256Minus1)
-			outSeed, _ = BigToHash(h)
-
-			z := new(big.Int).Exp(a, new(big.Int).Mul(big.NewInt(2), t), c)
-
-			gcd := new(big.Int).GCD(nil, nil, c, new(big.Int).Sub(z, bigOne))
-			if gcd.Cmp(bigOne) == 0 && z.Exp(z, c0, c).Cmp(bigOne) == 0 {
-				return outSeed, primeGenCounter, c, nil
-			}
-
-			t.Add(t, bigOne)
+		gcd := new(big.Int).GCD(nil, nil, c, new(big.Int).Sub(z, bigOne))
+		if gcd.Cmp(bigOne) == 0 && z.Exp(z, c0, c).Cmp(bigOne) == 0 {
+			return outSeed, primeGenCounter, c, nil
 		}
+
+		t.Add(t, bigOne)
 	}
 	return nil, 0, nil, errors.New("unable to generate random prime")
 }
