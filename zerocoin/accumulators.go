@@ -166,6 +166,25 @@ func SerializeBigNum(b *big.Int) []byte {
 	return append(lengthBytes[:], b.Bytes()...)
 }
 
+// DeserializeBigNum deserializes a big integer similar to OpenSSL
+// with a big endian 32-bit length followed by a big endian representation
+// of the number.
+func DeserializeBigNum(b []byte) (*big.Int, error) {
+	if len(b) < 4 {
+		return nil, errors.New("invalid big num length")
+	}
+
+	lengthBytes := b[:4]
+	length := binary.BigEndian.Uint32(lengthBytes)
+	if len(b) != int(4+length) {
+		return nil, errors.New("invalid big num length")
+	}
+
+	i := new(big.Int)
+	i.SetBytes(b[4:])
+	return i, nil
+}
+
 // GetChecksum calculates the checksum of a zerocoin accumulator
 // value.
 func GetChecksum(b *big.Int) uint32 {

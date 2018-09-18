@@ -8,7 +8,10 @@
 package database
 
 import (
+	"math/big"
+
 	"github.com/phoreproject/btcd/chaincfg/chainhash"
+	"github.com/phoreproject/btcd/zerocoin"
 	"github.com/phoreproject/btcutil"
 )
 
@@ -214,6 +217,166 @@ type BlockRegion struct {
 type Tx interface {
 	// Metadata returns the top-most bucket for all metadata storage.
 	Metadata() Bucket
+
+	// StoreCoinMint stores the provided pubcoin and associates it with a
+	// specific transaction hash in which the pubcoin was included. This can return
+	// at least the following errors:
+	//	 - ErrMintExists when the pubcoin is already in the database
+	//   - ErrTxNotWritable if the transaction is read-only
+	//   - ErrTxClosed if the transaction has already been closed
+	//
+	// Other errors are possible depending on the implementation.
+	StoreCoinMint(pubcoin *zerocoin.PublicCoin, transactionHash *chainhash.Hash) error
+
+	// StoreCoinSpend stores the provided coins pend and associates it with a
+	// specific transaction hash in which the coinspend was included. This
+	// can return at least the following errors:
+	//	 - ErrSpendExists when the coin mint is already in the database
+	//   - ErrTxNotWritable if the transaction is read-only
+	//   - ErrTxClosed if the transaction has already been closed
+	//
+	// Other errors are possible depending on the implementation.
+	StoreCoinSpend(serial *big.Int, transactionHash *chainhash.Hash) error
+
+	// StoreAccumulatorValue stores the provided accumulator and indexes it
+	// with a checksum.
+	// This can return at least the following errors:
+	//	 - ErrAccumulatorChecksumExists when the checksum is already in the database
+	//   - ErrTxNotWritable if the transaction is read-only
+	//   - ErrTxClosed if the transaction has already been closed
+	//
+	// Other errors are possible depending on the implementation.
+	StoreAccumulatorValue(checksum uint32, value *big.Int) error
+
+	// HasCoinMint returns whether or not a coin mint with the given pubcoin
+	// value exists in the database.
+	//
+	// The interface contract guarantees at least the following errors will
+	// be returned (other implementation-specific errors are possible):
+	//   - ErrTxClosed if the transaction has already been closed
+	//
+	// Other errors are possible depending on the implementation.
+	HasCoinMint(pubcoinBig *big.Int) (bool, error)
+
+	// HasCoinMintByHash returns whether or not a given pubcoin exists
+	// given the hash of its value.
+	//
+	// The interface contract guarantees at least the following errors will
+	// be returned (other implementation-specific errors are possible):
+	//   - ErrTxClosed if the transaction has already been closed
+	//
+	// Other errors are possible depending on the implementation.
+	HasCoinMintByHash(pubcoinHash *chainhash.Hash) (bool, error)
+
+	// HasCoinSpend returns whether or not a coin spend exists in the database
+	// given its serial number.
+	//
+	// The interface contract guarantees at least the following errors will
+	// be returned (other implementation-specific errors are possible):
+	//   - ErrTxClosed if the transaction has already been closed
+	//
+	// Other errors are possible depending on the implementation.
+	HasCoinSpend(serial *big.Int) (bool, error)
+
+	// HasCoinSpend returns whether or not a coin spend exists in the database
+	// given the hash of its serial number.
+	//
+	// The interface contract guarantees at least the following errors will
+	// be returned (other implementation-specific errors are possible):
+	//   - ErrTxClosed if the transaction has already been closed
+	//
+	// Other errors are possible depending on the implementation.
+	HasCoinSpendByHash(serialHash *chainhash.Hash) (bool, error)
+
+	// HasAccumulator returns whether or not an accumulator exists in the database
+	// given its checksum.
+	//
+	// The interface contract guarantees at least the following errors will
+	// be returned (other implementation-specific errors are possible):
+	//   - ErrTxClosed if the transaction has already been closed
+	//
+	// Other errors are possible depending on the implementation.
+	HasAccumulator(checksum uint32) (bool, error)
+
+	// FetchCoinMint returns the transaction ID where the pubcoin of the given
+	// value was included.
+	//
+	// The interface contract guarantees at least the following errors will
+	// be returned (other implementation-specific errors are possible):
+	//   - ErrCoinMintNotFound if the requested coin mint does not exist
+	//   - ErrTxClosed if the transaction has already been closed
+	//   - ErrCorruption if the database has somehow become corrupted
+	//
+	// NOTE: The data returned by this function is only valid during a
+	// database transaction.  Attempting to access it after a transaction
+	// has ended results in undefined behavior.  This constraint prevents
+	// additional data copies and allows support for memory-mapped database
+	// implementations.
+	FetchCoinMint(pubcoinBig *big.Int) (*chainhash.Hash, error)
+
+	// FetchCoinMint returns the transaction ID where the pubcoin with value
+	// of the given hash was included.
+	//
+	// The interface contract guarantees at least the following errors will
+	// be returned (other implementation-specific errors are possible):
+	//   - ErrCoinMintNotFound if the requested coin mint does not exist
+	//   - ErrTxClosed if the transaction has already been closed
+	//   - ErrCorruption if the database has somehow become corrupted
+	//
+	// NOTE: The data returned by this function is only valid during a
+	// database transaction.  Attempting to access it after a transaction
+	// has ended results in undefined behavior.  This constraint prevents
+	// additional data copies and allows support for memory-mapped database
+	// implementations.
+	FetchCoinMintByHash(pubcoinHash *chainhash.Hash) (*chainhash.Hash, error)
+
+	// FetchCoinSpend returns the transaction ID where the coin spend with serial
+	// number of the given value was included.
+	//
+	// The interface contract guarantees at least the following errors will
+	// be returned (other implementation-specific errors are possible):
+	//   - ErrCoinSpendNotFound if the requested coin spend does not exist
+	//   - ErrTxClosed if the transaction has already been closed
+	//   - ErrCorruption if the database has somehow become corrupted
+	//
+	// NOTE: The data returned by this function is only valid during a
+	// database transaction.  Attempting to access it after a transaction
+	// has ended results in undefined behavior.  This constraint prevents
+	// additional data copies and allows support for memory-mapped database
+	// implementations.
+	FetchCoinSpend(serial *big.Int) (*chainhash.Hash, error)
+
+	// FetchCoinSpendByHash returns the transaction ID where the coinspend with
+	// serial number hash of the given value was included.
+	//
+	// The interface contract guarantees at least the following errors will
+	// be returned (other implementation-specific errors are possible):
+	//   - ErrCoinSpendNotFound if the requested coin mint does not exist
+	//   - ErrTxClosed if the transaction has already been closed
+	//   - ErrCorruption if the database has somehow become corrupted
+	//
+	// NOTE: The data returned by this function is only valid during a
+	// database transaction.  Attempting to access it after a transaction
+	// has ended results in undefined behavior.  This constraint prevents
+	// additional data copies and allows support for memory-mapped database
+	// implementations.
+	FetchCoinSpendByHash(serialHash *chainhash.Hash) (*chainhash.Hash, error)
+
+	// FetchAccumulator returns the accumulator value with checksum matching
+	// the given value.
+	//
+	// The interface contract guarantees at least the following errors will
+	// be returned (other implementation-specific errors are possible):
+	//   - ErrAccumulatorNotFound if the requested accumulator does not exist
+	//   - ErrTxClosed if the transaction has already been closed
+	//   - ErrCorruption if the database has somehow become corrupted
+	//
+	// NOTE: The data returned by this function is only valid during a
+	// database transaction.  Attempting to access it after a transaction
+	// has ended results in undefined behavior.  This constraint prevents
+	// additional data copies and allows support for memory-mapped database
+	// implementations.
+	FetchAccumulator(checksum uint32) (*big.Int, error)
 
 	// StoreBlock stores the provided block into the database.  There are no
 	// checks to ensure the block connects to a previous block, contains

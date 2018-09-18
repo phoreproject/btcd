@@ -18,3 +18,15 @@ func TestSerializeBigNum(t *testing.T) {
 		return
 	}
 }
+
+func TestSerializeDeserializeBigNum(t *testing.T) {
+	i, err := zerocoin.DeserializeBigNum(zerocoin.SerializeBigNum(big.NewInt(100000)))
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	if i.Cmp(big.NewInt(100000)) != 0 {
+		t.Errorf("Could not deserialize big number correctly. Got: %s. Expected 100000", i.String())
+	}
+}

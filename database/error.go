@@ -107,6 +107,30 @@ const (
 	// exist in the database.
 	ErrBlockNotFound
 
+	// ErrMintExists indicates a coin mint with the provided hash already
+	// exists in the database.
+	ErrMintExists
+
+	// ErrSpendExists indicates a coin spend with the provided hash already
+	// exists in the database.
+	ErrSpendExists
+
+	// ErrAccumulatorChecksumExists indicates an accumulator with the given
+	// checksum already exists in the database.
+	ErrAccumulatorChecksumExists
+
+	// ErrCoinMintNotFound indicates a coin mint with the provided value does
+	// not exist in the database.
+	ErrCoinMintNotFound
+
+	// ErrCoinSpendNotFound indicates a coin spend with the provided value does
+	// not exist in the database.
+	ErrCoinSpendNotFound
+
+	// ErrAccumulatorNotFound indicates an accumulator with the given checksum does
+	// not exist in the database
+	ErrAccumulatorNotFound
+
 	// ErrBlockExists indicates a block with the provided hash already
 	// exists in the database.
 	ErrBlockExists

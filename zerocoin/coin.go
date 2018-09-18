@@ -55,3 +55,18 @@ func (p PublicCoin) Validate() bool {
 func (p PublicCoin) Equal(pub2 PublicCoin) bool {
 	return p.value == pub2.value && p.params == pub2.params && p.denomination == pub2.denomination
 }
+
+// Value gets the value of the pubcoin
+func (p *PublicCoin) Value() *big.Int {
+	return p.value
+}
+
+// Denomination gets the denomination of the pubcoin
+func (p *PublicCoin) Denomination() Denomination {
+	return p.denomination
+}
+
+// Params gets the parameters used by the pubcoin
+func (p *PublicCoin) Params() *Params {
+	return p.params
+}

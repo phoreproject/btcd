@@ -8,17 +8,15 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"math/big"
 	"os"
 	"path/filepath"
 	"runtime"
 	"sort"
 	"sync"
 
-	"github.com/phoreproject/btcd/chaincfg/chainhash"
-	"github.com/phoreproject/btcd/database"
-	"github.com/phoreproject/btcd/database/internal/treap"
-	"github.com/phoreproject/btcd/wire"
-	"github.com/phoreproject/btcutil"
+	"github.com/phoreproject/btcd/zerocoin"
+
 	"github.com/btcsuite/goleveldb/leveldb"
 	"github.com/btcsuite/goleveldb/leveldb/comparer"
 	ldberrors "github.com/btcsuite/goleveldb/leveldb/errors"
@@ -26,6 +24,11 @@ import (
 	"github.com/btcsuite/goleveldb/leveldb/iterator"
 	"github.com/btcsuite/goleveldb/leveldb/opt"
 	"github.com/btcsuite/goleveldb/leveldb/util"
+	"github.com/phoreproject/btcd/chaincfg/chainhash"
+	"github.com/phoreproject/btcd/database"
+	"github.com/phoreproject/btcd/database/internal/treap"
+	"github.com/phoreproject/btcd/wire"
+	"github.com/phoreproject/btcutil"
 )
 
 const (
@@ -70,6 +73,30 @@ var (
 	// blockIdxBucketName is the bucket used internally to track block
 	// metadata.
 	blockIdxBucketName = []byte("ffldb-blockidx")
+
+	// zerocoinMintBucketID is the ID of the internal zerocoin mint bucket.
+	// It is the value 2 encoded as an unsigned big-endian uint32.
+	zerocoinMintBucketID = [4]byte{0x00, 0x00, 0x00, 0x02}
+
+	// zerocoinMintBucketName is the bucket used internally to track zerocoin
+	// mint data.
+	zerocoinMintBucketName = []byte("ffldb-zeromint")
+
+	// zerocoinSpendBucketID is the ID of the internal zerocoin spend bucket.
+	// It is the value 3 encoded as an unsigned big-endian uint32.
+	zerocoinSpendBucketID = [4]byte{0x00, 0x00, 0x00, 0x03}
+
+	// zerocoinSpendBucketName is the bucket used internally to track zerocoin
+	// spend data.
+	zerocoinSpendBucketName = []byte("ffldb-zerospend")
+
+	// zerocoinAccumulatorBucketID is the ID of the internal zerocoin accumulator bucket.
+	// It is the value 4 encoded as an unsigned big-endian uint32.
+	zerocoinAccumulatorBucketID = [4]byte{0x00, 0x00, 0x00, 0x04}
+
+	// zerocoinAccumulatorBucketName is the bucket used internally to track zerocoin
+	// accumulator data.
+	zerocoinAccumulatorBucketName = []byte("ffldb-zeroacc")
 
 	// writeLocKeyName is the key used to store the current write file
 	// location.
@@ -949,22 +976,47 @@ type pendingBlock struct {
 	bytes []byte
 }
 
+// pendingCoin houses a coin spend or mint that will be written to disk when the
+// database transaction is committed.
+type pendingCoin struct {
+	hash            *chainhash.Hash
+	transactionHash *chainhash.Hash
+}
+
+// pendingCoin houses a coin spend or mint that will be written to disk when the
+// database transaction is committed.
+type pendingAccumulator struct {
+	checksum uint32
+	value    *big.Int
+}
+
 // transaction represents a database transaction.  It can either be read-only or
 // read-write and implements the database.Bucket interface.  The transaction
 // provides a root bucket against which all read and writes occur.
 type transaction struct {
-	managed        bool             // Is the transaction managed?
-	closed         bool             // Is the transaction closed?
-	writable       bool             // Is the transaction writable?
-	db             *db              // DB instance the tx was created from.
-	snapshot       *dbCacheSnapshot // Underlying snapshot for txns.
-	metaBucket     *bucket          // The root metadata bucket.
-	blockIdxBucket *bucket          // The block index bucket.
+	managed                   bool             // Is the transaction managed?
+	closed                    bool             // Is the transaction closed?
+	writable                  bool             // Is the transaction writable?
+	db                        *db              // DB instance the tx was created from.
+	snapshot                  *dbCacheSnapshot // Underlying snapshot for txns.
+	metaBucket                *bucket          // The root metadata bucket.
+	blockIdxBucket            *bucket          // The block index bucket.
+	zerocoinMintBucket        *bucket          // The bucket used for keeping track of zerocoin mints
+	zerocoinSpendBucket       *bucket          // The bucket used for keeping track of zerocoin spends
+	zerocoinAccumulatorBucket *bucket          // The zerocoin accumulator bucket
 
 	// Blocks that need to be stored on commit.  The pendingBlocks map is
 	// kept to allow quick lookups of pending data by block hash.
 	pendingBlocks    map[chainhash.Hash]int
 	pendingBlockData []pendingBlock
+
+	// Mints/Spends/Accumulators that need to be stored on commit.
+	pendingMints           map[chainhash.Hash]int
+	pendingMintData        []pendingCoin
+	pendingSpends          map[chainhash.Hash]int
+	pendingSpendData       []pendingCoin
+	pendingAccumulators    map[uint32]int
+	pendingAccumulatorData []pendingAccumulator
 
 	// Keys that need to be stored or deleted on commit.
 	pendingKeys   *treap.Mutable
@@ -1135,6 +1187,166 @@ func (tx *transaction) hasBlock(hash *chainhash.Hash) bool {
 	return tx.hasKey(bucketizedKey(blockIdxBucketID, hash[:]))
 }
 
+// hasCoinMint returns whether or not a coin mint with the given hash exists.
+func (tx *transaction) hasCoinMint(hash *chainhash.Hash) bool {
+	// Return true if the block is pending to be written on commit since
+	// it exists from the viewpoint of this transaction.
+	if _, exists := tx.pendingMints[*hash]; exists {
+		return true
+	}
+
+	return tx.hasKey(bucketizedKey(zerocoinMintBucketID, hash[:]))
+}
+
+// hasCoinSpend returns whether or not a coin spend with the given hash exists.
+func (tx *transaction) hasCoinSpend(hash *chainhash.Hash) bool {
+	// Return true if the block is pending to be written on commit since
+	// it exists from the viewpoint of this transaction.
+	if _, exists := tx.pendingSpends[*hash]; exists {
+		return true
+	}
+
+	return tx.hasKey(bucketizedKey(zerocoinSpendBucketID, hash[:]))
+}
+
+// hasAccumulator returns whether or not an accumulator with the given hash exists.
+func (tx *transaction) hasAccumulator(checksum uint32) bool {
+	// Return true if the block is pending to be written on commit since
+	// it exists from the viewpoint of this transaction.
+	if _, exists := tx.pendingAccumulators[checksum]; exists {
+		return true
+	}
+
+	var checksumBytes [4]byte
+	binary.LittleEndian.PutUint32(checksumBytes[:], checksum)
+
+	return tx.hasKey(bucketizedKey(zerocoinAccumulatorBucketID, checksumBytes[:]))
+}
+
+// StoreCoinMint stores the provided pubcoin and associates it with a
+// specific transaction hash in which the pubcoin was included. This can return
+// at least the following errors:
+//	 - ErrMintExists when the pubcoin is already in the database
+//   - ErrTxNotWritable if the transaction is read-only
+//   - ErrTxClosed if the transaction has already been closed
+//
+// This function is part of the database.Tx interface implementation.
+func (tx *transaction) StoreCoinMint(pubcoin *zerocoin.PublicCoin, transactionHash *chainhash.Hash) error {
+	// Ensure transaction state is valid.
+	if err := tx.checkClosed(); err != nil {
+		return err
+	}
+
+	// Ensure the transaction is writable.
+	if !tx.writable {
+		str := "store mint requires a writable database transaction"
+		return makeDbErr(database.ErrTxNotWritable, str, nil)
+	}
+
+	pubcoinHash := chainhash.HashH(zerocoin.SerializeBigNum(pubcoin.Value()))
+
+	// Reject the mint if it already exists.
+	if tx.hasKey(bucketizedKey(zerocoinMintBucketID, pubcoinHash[:])) {
+		str := fmt.Sprintf("mint %s already exists", pubcoinHash)
+		return makeDbErr(database.ErrMintExists, str, nil)
+	}
+
+	if tx.pendingMints == nil {
+		tx.pendingMints = make(map[chainhash.Hash]int)
+	}
+	tx.pendingMints[pubcoinHash] = len(tx.pendingMintData)
+	tx.pendingMintData = append(tx.pendingMintData, pendingCoin{
+		hash:            &pubcoinHash,
+		transactionHash: transactionHash,
+	})
+	log.Tracef("Added mint %s to pending mints", pubcoinHash)
+
+	return nil
+}
+
+// StoreCoinSpend stores the provided coins pend and associates it with a
+// specific transaction hash in which the coinspend was included. This
+// can return at least the following errors:
+//	 - ErrSpendExists when the coin mint is already in the database
+//   - ErrTxNotWritable if the transaction is read-only
+//   - ErrTxClosed if the transaction has already been closed
+//
+// This function is part of the database.Tx interface implementation.
+func (tx *transaction) StoreCoinSpend(serial *big.Int, transactionHash *chainhash.Hash) error {
+	// Ensure transaction state is valid.
+	if err := tx.checkClosed(); err != nil {
+		return err
+	}
+
+	// Ensure the transaction is writable.
+	if !tx.writable {
+		str := "store spend requires a writable database transaction"
+		return makeDbErr(database.ErrTxNotWritable, str, nil)
+	}
+
+	serialHash := chainhash.HashH(zerocoin.SerializeBigNum(serial))
+
+	// Reject the mint if it already exists.
+	if tx.hasKey(bucketizedKey(zerocoinSpendBucketID, serialHash[:])) {
+		str := fmt.Sprintf("spend %s already exists", serialHash)
+		return makeDbErr(database.ErrSpendExists, str, nil)
+	}
+
+	if tx.pendingSpends == nil {
+		tx.pendingSpends = make(map[chainhash.Hash]int)
+	}
+	tx.pendingSpends[serialHash] = len(tx.pendingSpendData)
+	tx.pendingSpendData = append(tx.pendingSpendData, pendingCoin{
+		hash:            &serialHash,
+		transactionHash: transactionHash,
+	})
+	log.Tracef("Added spend %s to pending spends", serialHash)
+
+	return nil
+}
+
+// StoreAccumulatorValue stores the provided accumulator and indexes it
+// with a checksum.
+// This can return at least the following errors:
+//	 - ErrAccumulatorChecksumExists when the checksum is already in the database
+//   - ErrTxNotWritable if the transaction is read-only
+//   - ErrTxClosed if the transaction has already been closed
+//
+// This function is part of the database.Tx interface implementation.
+func (tx *transaction) StoreAccumulatorValue(checksum uint32, value *big.Int) error {
+	// Ensure transaction state is valid.
+	if err := tx.checkClosed(); err != nil {
+		return err
+	}
+
+	// Ensure the transaction is writable.
+	if !tx.writable {
+		str := "store accumulator value requires a writable database transaction"
+		return makeDbErr(database.ErrTxNotWritable, str, nil)
+	}
+
+	var accumulatorChecksumBytes [4]byte
+	binary.LittleEndian.PutUint32(accumulatorChecksumBytes[:], checksum)
+
+	// Reject the mint if it already exists.
+	if tx.hasKey(bucketizedKey(zerocoinSpendBucketID, accumulatorChecksumBytes[:])) {
+		str := fmt.Sprintf("accumulator %d already exists", checksum)
+		return makeDbErr(database.ErrAccumulatorChecksumExists, str, nil)
+	}
+
+	if tx.pendingAccumulators == nil {
+		tx.pendingAccumulators = make(map[uint32]int)
+	}
+	tx.pendingAccumulators[checksum] = len(tx.pendingAccumulatorData)
+	tx.pendingAccumulatorData = append(tx.pendingAccumulatorData, pendingAccumulator{
+		checksum: checksum,
+		value:    value,
+	})
+	log.Tracef("Added accumulator %d to pending accumulators", checksum)
+
+	return nil
+}
+
 // StoreBlock stores the provided block into the database.  There are no checks
 // to ensure the block connects to a previous block, contains double spends, or
 // any additional functionality such as transaction indexing.  It simply stores
@@ -1189,6 +1401,95 @@ func (tx *transaction) StoreBlock(block *btcutil.Block) error {
 	return nil
 }
 
+// HasCoinMint returns whether or not a coin mint with the given pubcoin
+// value exists in the database.
+//
+// The interface contract guarantees at least the following errors will
+// be returned (other implementation-specific errors are possible):
+//   - ErrTxClosed if the transaction has already been closed
+//
+// This function is part of the database.Tx interface implementation.
+func (tx *transaction) HasCoinMint(pubcoinBig *big.Int) (bool, error) {
+	// Ensure transaction state is valid.
+	if err := tx.checkClosed(); err != nil {
+		return false, err
+	}
+
+	hash := chainhash.HashH(zerocoin.SerializeBigNum(pubcoinBig))
+
+	return tx.hasCoinMint(&hash), nil
+}
+
+// HasCoinMintByHash returns whether or not a given pubcoin exists
+// given the hash of its value.
+//
+// The interface contract guarantees at least the following errors will
+// be returned (other implementation-specific errors are possible):
+//   - ErrTxClosed if the transaction has already been closed
+//
+// This function is part of the database.Tx interface implementation.
+func (tx *transaction) HasCoinMintByHash(hash *chainhash.Hash) (bool, error) {
+	// Ensure transaction state is valid.
+	if err := tx.checkClosed(); err != nil {
+		return false, err
+	}
+
+	return tx.hasCoinMint(hash), nil
+}
+
+// HasCoinSpend returns whether or not a coin spend exists in the database
+// given its serial number.
+//
+// The interface contract guarantees at least the following errors will
+// be returned (other implementation-specific errors are possible):
+//   - ErrTxClosed if the transaction has already been closed
+//
+// This function is part of the database.Tx interface implementation.
+func (tx *transaction) HasCoinSpend(serial *big.Int) (bool, error) {
+	// Ensure transaction state is valid.
+	if err := tx.checkClosed(); err != nil {
+		return false, err
+	}
+
+	hash := chainhash.HashH(zerocoin.SerializeBigNum(serial))
+
+	return tx.hasCoinSpend(&hash), nil
+}
+
+// HasCoinSpend returns whether or not a coin spend exists in the database
+// given the hash of its serial number.
+//
+// The interface contract guarantees at least the following errors will
+// be returned (other implementation-specific errors are possible):
+//   - ErrTxClosed if the transaction has already been closed
+//
+// This function is part of the database.Tx interface implementation.
+func (tx *transaction) HasCoinSpendByHash(hash *chainhash.Hash) (bool, error) {
+	// Ensure transaction state is valid.
+	if err := tx.checkClosed(); err != nil {
+		return false, err
+	}
+
+	return tx.hasCoinSpend(hash), nil
+}
+
+// HasAccumulator returns whether or not an accumulator exists in the database
+// given its checksum.
+//
+// The interface contract guarantees at least the following errors will
+// be returned (other implementation-specific errors are possible):
+//   - ErrTxClosed if the transaction has already been closed
+//
+// This function is part of the database.Tx interface implementation.
+func (tx *transaction) HasAccumulator(checksum uint32) (bool, error) {
+	// Ensure transaction state is valid.
+	if err := tx.checkClosed(); err != nil {
+		return false, err
+	}
+
+	return tx.hasAccumulator(checksum), nil
+}
+
 // HasBlock returns whether or not a block with the given hash exists in the
 // database.
 //
@@ -1226,6 +1527,45 @@ func (tx *transaction) HasBlocks(hashes []chainhash.Hash) ([]bool, error) {
 	return results, nil
 }
 
+// fetchMint fetches the transaction ID for the given hash of a coin mint.
+// It will return ErrCoinMintNotFound if there is no entry.
+func (tx *transaction) fetchMint(hash *chainhash.Hash) ([]byte, error) {
+	mintTxID := tx.zerocoinMintBucket.Get(hash[:])
+	if mintTxID == nil {
+		str := fmt.Sprintf("mint %s does not exist", hash)
+		return nil, makeDbErr(database.ErrCoinMintNotFound, str, nil)
+	}
+
+	return mintTxID, nil
+}
+
+// fetchSpend fetches the transaction ID for the given hash of a coin spend.
+// It will return ErrCoinSpendNotFound if there is no entry.
+func (tx *transaction) fetchSpend(hash *chainhash.Hash) ([]byte, error) {
+	spendTxID := tx.zerocoinSpendBucket.Get(hash[:])
+	if spendTxID == nil {
+		str := fmt.Sprintf("spend %s does not exist", hash)
+		return nil, makeDbErr(database.ErrCoinSpendNotFound, str, nil)
+	}
+
+	return spendTxID, nil
+}
+
+// fetchAccumulator fetches the value of the accumulator with a given checksum.
+// It will return ErrAccumulatorNotFound if there is no entry.
+func (tx *transaction) fetchAccumulator(checksum uint32) (*big.Int, error) {
+	var checksumBytes [4]byte
+	binary.LittleEndian.PutUint32(checksumBytes[:], checksum)
+
+	accValue := tx.zerocoinAccumulatorBucket.Get(checksumBytes[:])
+	if accValue == nil {
+		str := fmt.Sprintf("accumulator %d does not exist", checksum)
+		return nil, makeDbErr(database.ErrAccumulatorNotFound, str, nil)
+	}
+
+	return zerocoin.DeserializeBigNum(accValue)
+}
+
 // fetchBlockRow fetches the metadata stored in the block index for the provided
 // hash.  It will return ErrBlockNotFound if there is no entry.
 func (tx *transaction) fetchBlockRow(hash *chainhash.Hash) ([]byte, error) {
@@ -1236,6 +1576,185 @@ func (tx *transaction) fetchBlockRow(hash *chainhash.Hash) ([]byte, error) {
 	}
 
 	return blockRow, nil
+}
+
+// FetchCoinMint returns the transaction ID where the pubcoin of the given
+// value was included.
+//
+// The interface contract guarantees at least the following errors will
+// be returned (other implementation-specific errors are possible):
+//   - ErrCoinMintNotFound if the requested coin mint does not exist
+//   - ErrTxClosed if the transaction has already been closed
+//   - ErrCorruption if the database has somehow become corrupted
+//
+// NOTE: The data returned by this function is only valid during a
+// database transaction.  Attempting to access it after a transaction
+// has ended results in undefined behavior.  This constraint prevents
+// additional data copies and allows support for memory-mapped database
+// implementations.
+//
+// This function is part of the database.Tx interface implementation.
+func (tx *transaction) FetchCoinMint(pubcoinBig *big.Int) (*chainhash.Hash, error) {
+	// Ensure transaction state is valid.
+	if err := tx.checkClosed(); err != nil {
+		return nil, err
+	}
+
+	hash := chainhash.HashH(zerocoin.SerializeBigNum(pubcoinBig))
+
+	// When the block is pending to be written on commit return the bytes
+	// from there.
+	if idx, exists := tx.pendingMints[hash]; exists {
+		transactionID := tx.pendingMintData[idx].transactionHash
+		return transactionID, nil
+	}
+
+	mintTxID, err := tx.fetchMint(&hash)
+	if err != nil {
+		return nil, err
+	}
+	return chainhash.NewHash(mintTxID)
+}
+
+// FetchCoinMint returns the transaction ID where the pubcoin with value
+// of the given hash was included.
+//
+// The interface contract guarantees at least the following errors will
+// be returned (other implementation-specific errors are possible):
+//   - ErrCoinMintNotFound if the requested coin mint does not exist
+//   - ErrTxClosed if the transaction has already been closed
+//   - ErrCorruption if the database has somehow become corrupted
+//
+// NOTE: The data returned by this function is only valid during a
+// database transaction.  Attempting to access it after a transaction
+// has ended results in undefined behavior.  This constraint prevents
+// additional data copies and allows support for memory-mapped database
+// implementations.
+//
+// This function is part of the database.Tx interface implementation.
+func (tx *transaction) FetchCoinMintByHash(hash *chainhash.Hash) (*chainhash.Hash, error) {
+	// Ensure transaction state is valid.
+	if err := tx.checkClosed(); err != nil {
+		return nil, err
+	}
+
+	// When the block is pending to be written on commit return the bytes
+	// from there.
+	if idx, exists := tx.pendingMints[*hash]; exists {
+		transactionID := tx.pendingMintData[idx].transactionHash
+		return transactionID, nil
+	}
+
+	mintTxID, err := tx.fetchMint(hash)
+	if err != nil {
+		return nil, err
+	}
+	return chainhash.NewHash(mintTxID)
+}
+
+// FetchCoinSpend returns the transaction ID where the coin spend with serial
+// number of the given value was included.
+//
+// The interface contract guarantees at least the following errors will
+// be returned (other implementation-specific errors are possible):
+//   - ErrCoinSpendNotFound if the requested coin spend does not exist
+//   - ErrTxClosed if the transaction has already been closed
+//   - ErrCorruption if the database has somehow become corrupted
+//
+// NOTE: The data returned by this function is only valid during a
+// database transaction.  Attempting to access it after a transaction
+// has ended results in undefined behavior.  This constraint prevents
+// additional data copies and allows support for memory-mapped database
+// implementations.
+//
+// This function is part of the database.Tx interface implementation.
+func (tx *transaction) FetchCoinSpend(serial *big.Int) (*chainhash.Hash, error) {
+	// Ensure transaction state is valid.
+	if err := tx.checkClosed(); err != nil {
+		return nil, err
+	}
+
+	hash := chainhash.HashH(zerocoin.SerializeBigNum(serial))
+
+	// When the block is pending to be written on commit return the bytes
+	// from there.
+	if idx, exists := tx.pendingSpends[hash]; exists {
+		transactionID := tx.pendingSpendData[idx].transactionHash
+		return transactionID, nil
+	}
+
+	spendTxID, err := tx.fetchSpend(&hash)
+	if err != nil {
+		return nil, err
+	}
+	return chainhash.NewHash(spendTxID)
+}
+
+// FetchCoinSpendByHash returns the transaction ID where the coinspend with
+// serial number hash of the given value was included.
+//
+// The interface contract guarantees at least the following errors will
+// be returned (other implementation-specific errors are possible):
+//   - ErrCoinSpendNotFound if the requested coin mint does not exist
+//   - ErrTxClosed if the transaction has already been closed
+//   - ErrCorruption if the database has somehow become corrupted
+//
+// NOTE: The data returned by this function is only valid during a
+// database transaction.  Attempting to access it after a transaction
+// has ended results in undefined behavior.  This constraint prevents
+// additional data copies and allows support for memory-mapped database
+// implementations.
+//
+// This function is part of the database.Tx interface implementation.
+func (tx *transaction) FetchCoinSpendByHash(hash *chainhash.Hash) (*chainhash.Hash, error) {
+	// Ensure transaction state is valid.
+	if err := tx.checkClosed(); err != nil {
+		return nil, err
+	}
+
+	// When the block is pending to be written on commit return the bytes
+	// from there.
+	if idx, exists := tx.pendingSpends[*hash]; exists {
+		transactionID := tx.pendingSpendData[idx].transactionHash
+		return transactionID, nil
+	}
+
+	spendTxID, err := tx.fetchSpend(hash)
+	if err != nil {
+		return nil, err
+	}
+	return chainhash.NewHash(spendTxID)
+}
+
+// FetchAccumulator returns the accumulator value with checksum matching
+// the given value.
+//
+// The interface contract guarantees at least the following errors will
+// be returned (other implementation-specific errors are possible):
+//   - ErrAccumulatorNotFound if the requested accumulator does not exist
+//   - ErrTxClosed if the transaction has already been closed
+//   - ErrCorruption if the database has somehow become corrupted
+//
+// NOTE: The data returned by this function is only valid during a
+// database transaction.  Attempting to access it after a transaction
+// has ended results in undefined behavior.  This constraint prevents
+// additional data copies and allows support for memory-mapped database
+// implementations.
+//
+// This function is part of the database.Tx interface implementation.
+func (tx *transaction) FetchAccumulator(checksum uint32) (*big.Int, error) {
+	// Ensure transaction state is valid.
+	if err := tx.checkClosed(); err != nil {
+		return nil, err
+	}
+
+	// When the block is pending to be written on commit return the bytes
+	// from there.
+	if idx, exists := tx.pendingAccumulators[checksum]; exists {
+		return tx.pendingAccumulatorData[idx].value, nil
+	}
+
+	return tx.fetchAccumulator(checksum)
 }
 
 // FetchBlockHeader returns the raw serialized bytes for the block header
@@ -1636,6 +2155,9 @@ func (tx *transaction) close() {
 	// Clear pending blocks that would have been written on commit.
 	tx.pendingBlocks = nil
 	tx.pendingBlockData = nil
+	tx.pendingAccumulatorData = nil
+	tx.pendingMintData = nil
+	tx.pendingSpendData = nil
 
 	// Clear pending keys that would have been written or deleted on commit.
 	tx.pendingKeys = nil
@@ -1709,6 +2231,42 @@ func (tx *transaction) writePendingAndCommit() error {
 		blockHdr := blockData.bytes[0:blockHdrSize]
 		blockRow := serializeBlockRow(location, blockHdr)
 		err = tx.blockIdxBucket.Put(blockData.hash[:], blockRow)
+		if err != nil {
+			rollback()
+			return err
+		}
+	}
+
+	// Loop through all of the pending mints to store and write them.
+	for _, mintData := range tx.pendingMintData {
+		log.Tracef("Storing mint %s", mintData.hash)
+
+		err := tx.zerocoinMintBucket.Put(mintData.hash[:], mintData.transactionHash[:])
+		if err != nil {
+			rollback()
+			return err
+		}
+	}
+
+	// Loop through all of the pending mints to store and write them.
+	for _, spendData := range tx.pendingSpendData {
+		log.Tracef("Storing spend %s", spendData.hash)
+
+		err := tx.zerocoinSpendBucket.Put(spendData.hash[:], spendData.transactionHash[:])
+		if err != nil {
+			rollback()
+			return err
+		}
+	}
+
+	// Loop through all of the pending mints to store and write them.
+	for _, accData := range tx.pendingAccumulatorData {
+		log.Tracef("Storing accumulator %d", accData.checksum)
+
+		var checksumBytes [4]byte
+		binary.LittleEndian.PutUint32(checksumBytes[:], accData.checksum)
+
+		err := tx.zerocoinMintBucket.Put(checksumBytes[:], zerocoin.SerializeBigNum(accData.value))
 		if err != nil {
 			rollback()
 			return err
@@ -1855,6 +2413,9 @@ func (db *db) begin(writable bool) (*transaction, error) {
 	}
 	tx.metaBucket = &bucket{tx: tx, id: metadataBucketID}
 	tx.blockIdxBucket = &bucket{tx: tx, id: blockIdxBucketID}
+	tx.zerocoinMintBucket = &bucket{tx: tx, id: zerocoinMintBucketID}
+	tx.zerocoinSpendBucket = &bucket{tx: tx, id: zerocoinSpendBucketID}
+	tx.zerocoinAccumulatorBucket = &bucket{tx: tx, id: zerocoinAccumulatorBucketID}
 	return tx, nil
 }
 
