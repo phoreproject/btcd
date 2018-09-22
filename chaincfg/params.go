@@ -6,7 +6,6 @@ package chaincfg
 
 import (
 	"errors"
-	"math"
 	"math/big"
 	"strings"
 	"time"
