@@ -250,12 +250,12 @@ func (view *UtxoViewpoint) connectTransaction(tx *btcutil.Tx, blockHeight int32,
 				}
 				*stxos = append(*stxos, stxo)
 			}
-		}
 
-		// Mark the entry as spent.  This is not done until after the
-		// relevant details have been accessed since spending it might
-		// clear the fields from memory in the future.
-		entry.Spend()
+			// Mark the entry as spent.  This is not done until after the
+			// relevant details have been accessed since spending it might
+			// clear the fields from memory in the future.
+			entry.Spend()
+		}
 	}
 
 	// Add the transaction's outputs as available utxos.

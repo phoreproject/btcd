@@ -1197,21 +1197,18 @@ func (b *BlockChain) initChainState() error {
 			initBlockNode(node, header, parent)
 			node.status = status
 
-			if tip != nil {
-				b.index.addNode(node)
-				if uint32(height) > b.chainParams.LastPoWBlock {
-					b.index.SetProofOfStake(node, true)
-				}
-				b.index.SetStakeEntropyBit(node, node.GetStakeEntropyBit())
-
-				sm, generatedStakeModifier, err := b.computeNextStakeModifier(node.parent)
-				if err != nil {
-					return err
-				}
-				b.index.SetStakeModifier(node, sm, generatedStakeModifier)
-			} else {
-				b.index.AddNode(node)
+			b.index.addNode(node)
+			if uint32(i) > b.chainParams.LastPoWBlock {
+				b.index.SetProofOfStake(node, true)
 			}
+			b.index.SetStakeEntropyBit(node, node.GetStakeEntropyBit())
+
+			sm, generatedStakeModifier, err := b.computeNextStakeModifier(node.parent)
+			if err != nil {
+				return err
+			}
+			b.index.SetStakeModifier(node, sm, generatedStakeModifier)
+
 
 			lastNode = node
 			i++
