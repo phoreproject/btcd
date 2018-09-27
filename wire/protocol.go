@@ -15,6 +15,23 @@ const (
 	// ProtocolVersion is the latest protocol version this package supports.
 	ProtocolVersion uint32 = 70003
 
+	// MultipleAddressVersion is the protocol version which added multiple
+	// addresses per message (pver >= MultipleAddressVersion).
+	MultipleAddressVersion uint32 = 209
+
+	// NetAddressTimeVersion is the protocol version which added the
+	// timestamp field (pver >= NetAddressTimeVersion).
+	NetAddressTimeVersion uint32 = 31402
+
+	// BIP0037Version is the protocol version which added new connection
+	// bloom filtering related messages and extended the version message
+	// with a relay flag (pver >= BIP0037Version).
+	BIP0037Version uint32 = 70001
+
+	// RejectVersion is the protocol version which added a new reject
+	// message.
+	RejectVersion uint32 = 70002
+
 	// SendHeadersVersion is the protocol version which added a new
 	// sendheaders message.
 	SendHeadersVersion uint32 = 70012

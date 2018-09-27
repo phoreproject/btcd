@@ -967,72 +967,6 @@ func (p *Peer) PushRejectMsg(command string, code wire.RejectCode, reason string
 	<-doneChan
 }
 
-// handleRemoteVersionMsg is invoked when a version bitcoin message is received
-// from the remote peer.  It will return an error if the remote peer's version
-// is not compatible with ours.
-func (p *Peer) handleRemoteVersionMsg(msg *wire.MsgVersion) error {
-	// Detect self connections.
-	if !allowSelfConns && sentNonces.Exists(msg.Nonce) {
-		return errors.New("disconnecting peer connected to self")
-	}
-
-	// Notify and disconnect clients that have a protocol version that is
-	// too old.
-	//
-	// NOTE: If minAcceptableProtocolVersion is raised to be higher than
-	// wire.RejectVersion, this should send a reject packet before
-	// disconnecting.
-	if uint32(msg.ProtocolVersion) < minAcceptableProtocolVersion {
-		reason := fmt.Sprintf("protocol version must be %d or greater",
-			minAcceptableProtocolVersion)
-		return errors.New(reason)
-	}
-
-	// Updating a bunch of stats including block based stats, and the
-	// peer's time offset.
-	p.statsMtx.Lock()
-	p.lastBlock = msg.LastBlock
-	p.startingHeight = msg.LastBlock
-	p.timeOffset = msg.Timestamp.Unix() - time.Now().Unix()
-	p.statsMtx.Unlock()
-
-	// Negotiate the protocol version.
-	p.flagsMtx.Lock()
-	p.advertisedProtoVer = uint32(msg.ProtocolVersion)
-	p.protocolVersion = minUint32(p.protocolVersion, p.advertisedProtoVer)
-	p.versionKnown = true
-	log.Debugf("Negotiated protocol version %d for peer %s",
-		p.protocolVersion, p)
-
-	// Set the peer's ID.
-	p.id = atomic.AddInt32(&nodeCount, 1)
-
-	// Set the supported services for the peer to what the remote peer
-	// advertised.
-	p.services = msg.Services
-
-	// Set the remote peer's user agent.
-	p.userAgent = msg.UserAgent
-
-	// Determine if the peer would like to receive witness data with
-	// transactions, or not.
-	if p.services&wire.SFNodeWitness == wire.SFNodeWitness {
-		p.witnessEnabled = true
-	}
-	p.flagsMtx.Unlock()
-
-	// Once the version message has been exchanged, we're able to determine
-	// if this peer knows how to encode witness data over the wire
-	// protocol. If so, then we'll switch to a decoding mode which is
-	// prepared for the new transaction format introduced as part of
-	// BIP0144.
-	if p.services&wire.SFNodeWitness == wire.SFNodeWitness {
-		p.wireEncoding = wire.WitnessEncoding
-	}
-
-	return nil
-}
-
 // handlePingMsg is invoked when a peer receives a ping bitcoin message.  For
 // recent clients (protocol version > BIP0031Version), it replies with a pong
 // message.  For older clients, it does nothing and anything other than failure
@@ -1909,40 +1843,6 @@ func (p *Peer) QueueInventory(invVect *wire.InvVect) {
 	}
 
 	p.outputInvChan <- invVect
-}
-
-// AssociateConnection associates the given conn to the peer.   Calling this
-// function when the peer is already connected will have no effect.
-func (p *Peer) AssociateConnection(conn net.Conn) {
-	// Already connected?
-	if !atomic.CompareAndSwapInt32(&p.connected, 0, 1) {
-		return
-	}
-
-	p.conn = conn
-	p.timeConnected = time.Now()
-
-	if p.inbound {
-		p.addr = p.conn.RemoteAddr().String()
-
-		// Set up a NetAddress for the peer to be used with AddrManager.  We
-		// only do this inbound because outbound set this up at connection time
-		// and no point recomputing.
-		na, err := newNetAddress(p.conn.RemoteAddr(), p.services)
-		if err != nil {
-			log.Errorf("Cannot create remote net address: %v", err)
-			p.Disconnect()
-			return
-		}
-		p.na = na
-	}
-
-	go func() {
-		if err := p.start(); err != nil {
-			log.Debugf("Cannot start peer %v: %v", p, err)
-			p.Disconnect()
-		}
-	}()
 }
 
 // Connected returns whether or not the peer is currently connected.

@@ -70,7 +70,7 @@ func isNullOutpoint(outpoint *wire.OutPoint) bool {
 // IsZerocoinSpend returns true if the transaction is a zerocoin spending
 // transaction.
 func IsZerocoinSpend(msg *wire.MsgTx) bool {
-	return len(msg.TxIn) > 0 && msg.TxIn[0].PreviousOutPoint.Hash.IsEqual(zeroHash) && len(msg.TxIn[0].SignatureScript) > 0 && msg.TxIn[0].SignatureScript[0] == txscript.OP_ZEROCOINSPEND
+	return len(msg.TxIn) > 0 && msg.TxIn[0].PreviousOutPoint.Hash.IsEqual(&zeroHash) && len(msg.TxIn[0].SignatureScript) > 0 && msg.TxIn[0].SignatureScript[0] == txscript.OP_ZEROCOINSPEND
 }
 
 // IsScriptZerocoinMint checks if a given script is a zerocoin minting
@@ -1086,10 +1086,8 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *btcutil.Block, vi
 			return err
 		}
 
-		prevTxHash := txn.MsgTx().TxIn[0].PreviousOutPoint.Hash
-		prevTx := view.LookupEntry(&prevTxHash)
-
-		value := prevTx.AmountByIndex(txn.MsgTx().TxIn[0].PreviousOutPoint.Index)
+		prevTxOutPoint := txn.MsgTx().TxIn[0].PreviousOutPoint
+		prevTx := view.LookupEntry(prevTxOutPoint)
 
 		prevTxBlock, err := b.BlockByHeight(prevTx.blockHeight)
 		if err != nil {
@@ -1111,7 +1109,8 @@ func (b *BlockChain) checkConnectBlock(node *blockNode, block *btcutil.Block, vi
 
 			hashProofOfStakeBig := HashToBig(&hashProofOfStake)
 
-			if !stakeTargetHit(hashProofOfStakeBig, int64(value), target) {
+			//TODO check prevTx.Amount()
+			if !stakeTargetHit(hashProofOfStakeBig, prevTx.Amount(), target) {
 				str := fmt.Sprintf("CheckProofOfStake() : INFO: check kernel failed on coinstake %s", txn.Hash().String())
 				return ruleError(ErrBadCoinstakeKernel, str)
 			}
