@@ -2092,8 +2092,8 @@ func (c *Client) ImportAddress(address string) error {
 // returned instance.
 //
 // See ImportAddress for the blocking version and more details.
-func (c *Client) ImportAddressRescanAsync(address string, rescan bool) FutureImportAddressResult {
-	cmd := btcjson.NewImportAddressCmd(address, &rescan)
+func (c *Client) ImportAddressRescanAsync(address string, account string, rescan bool) FutureImportAddressResult {
+	cmd := btcjson.NewImportAddressCmd(address, account, &rescan)
 	return c.sendCmd(cmd)
 }
 
