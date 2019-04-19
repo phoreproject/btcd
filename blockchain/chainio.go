@@ -34,6 +34,22 @@ const (
 	latestSpendJournalBucketVersion = 1
 )
 
+const (
+	// blockHdrSize is the size of a block header.  This is simply the
+	// constant from wire and is only provided here for convenience since
+	// wire.MaxBlockHeaderPayload is quite long.
+	blockHdrSize = wire.MaxBlockHeaderPayload
+
+	// latestUtxoSetBucketVersion is the current version of the utxo set
+	// bucket that is used to track all unspent outputs.
+	latestUtxoSetBucketVersion = 2
+
+	// latestSpendJournalBucketVersion is the current version of the spend
+	// journal bucket that is used to track all spent transactions for use
+	// in reorgs.
+	latestSpendJournalBucketVersion = 1
+)
+
 var (
 	// blockIndexBucketName is the name of the db bucket used to house to the
 	// block headers and contextual information.
@@ -1196,8 +1212,8 @@ func (b *BlockChain) initChainState() error {
 			node := &blockNodes[i]
 			initBlockNode(node, header, parent)
 			node.status = status
-
 			b.index.addNode(node)
+
 			if uint32(i) > b.chainParams.LastPoWBlock {
 				b.index.SetProofOfStake(node, true)
 			}
@@ -1208,7 +1224,6 @@ func (b *BlockChain) initChainState() error {
 				return err
 			}
 			b.index.SetStakeModifier(node, sm, generatedStakeModifier)
-
 
 			lastNode = node
 			i++

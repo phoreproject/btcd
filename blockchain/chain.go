@@ -570,6 +570,12 @@ func (b *BlockChain) connectBlock(node *blockNode, block *btcutil.Block,
 		return err
 	}
 
+	// Write any block status changes to DB before updating best state.
+	err := b.index.flushToDB()
+	if err != nil {
+		return err
+	}
+
 	// Generate a new best state snapshot that will be used to update the
 	// database and later memory if all database updates are successful.
 	b.stateLock.RLock()

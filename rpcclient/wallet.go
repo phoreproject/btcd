@@ -2077,8 +2077,8 @@ func (r FutureImportAddressResult) Receive() error {
 // returned instance.
 //
 // See ImportAddress for the blocking version and more details.
-func (c *Client) ImportAddressAsync(address string, account string) FutureImportAddressResult {
-	cmd := btcjson.NewImportAddressCmd(address, account, nil)
+func (c *Client) ImportAddressAsync(address string) FutureImportAddressResult {
+	cmd := btcjson.NewImportAddressCmd(address, "", nil)
 	return c.sendCmd(cmd)
 }
 

@@ -30,6 +30,22 @@ const (
 	tfModified
 )
 
+// txoFlags is a bitmask defining additional information and state for a
+// transaction output in a utxo view.
+type txoFlags uint8
+
+const (
+	// tfCoinBase indicates that a txout was contained in a coinbase tx.
+	tfCoinBase txoFlags = 1 << iota
+
+	// tfSpent indicates that a txout is spent.
+	tfSpent
+
+	// tfModified indicates that a txout has been modified since it was
+	// loaded.
+	tfModified
+)
+
 // UtxoEntry houses details about an individual transaction output in a utxo
 // view such as whether or not it was contained in a coinbase tx, the height of
 // the block that contains the tx, whether or not it is spent, its public key
@@ -237,12 +253,10 @@ func (view *UtxoViewpoint) connectTransaction(tx *btcutil.Tx, blockHeight int32,
 					txIn.PreviousOutPoint))
 			}
 
-
-			// Only create the stxo details if  requested.
+			// Only create the stxo details if requested.
 			if stxos != nil {
-			// Populate the stxo details using the utxo entry.
+				// Populate the stxo details using the utxo entry.
 				var stxo = SpentTxOut{
-
 					Amount:     entry.Amount(),
 					PkScript:   entry.PkScript(),
 					Height:     entry.BlockHeight(),
@@ -262,6 +276,7 @@ func (view *UtxoViewpoint) connectTransaction(tx *btcutil.Tx, blockHeight int32,
 	view.AddTxOuts(tx, blockHeight)
 	return nil
 }
+
 
 // connectTransactions updates the view by adding all new utxos created by all
 // of the transactions in the passed block, marking all utxos the transactions

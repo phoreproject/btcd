@@ -857,8 +857,10 @@ func CheckTransactionInputs(tx *btcutil.Tx, txHeight int32, utxoView *UtxoViewpo
 
 	txHash := tx.Hash()
 	var totalSatoshiIn int64
+
 	if IsZerocoinSpend(tx.MsgTx()) {
 		totalSatoshiIn = GetZerocoinIn(tx.MsgTx())
+
 	} else {
 		for txInIndex, txIn := range tx.MsgTx().TxIn {
 			// Ensure the referenced input transaction is available.

@@ -372,6 +372,7 @@ func (bi *blockIndex) flushToDB() error {
 	return err
 }
 
+
 // SetStakeEntropyBit sets the entropy bit to true
 func (bi *blockIndex) SetStakeEntropyBit(n *blockNode, entropyBit uint) error {
 	if entropyBit > 1 {
